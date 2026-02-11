@@ -52,27 +52,35 @@ comment.
 ///   current hardfork.
 #[serde(rename = "eth_getBalance")]
 GetBalance(
-    /// Address to check the balance of.
+    /// `DATA`, 20 bytes - Address to check the balance of.
     Address,
-    /// Block number, tag, or EIP-1898 block identifier. Defaults to `"latest"`.
+    /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier. Defaults to `"latest"`.
     Option<BlockSpec>,
 ),
 ```
 
 ### Field-level doc comment conventions
 
-Each field's doc comment becomes a row in the generated Params table. The CLI
-tool derives the columns as follows:
+Each field's doc comment becomes a row in the generated Params table. The doc
+comment format is:
+
+```
+/// `TYPE` - Description of the parameter.
+```
+
+where `TYPE` uses the canonical type names from the table below (e.g.
+`` `DATA`, 20 bytes ``, `` `QUANTITY` ``, `` `BlockSpec` ``). The CLI tool
+derives the columns as follows:
 
 | Column | Source |
 |--------|--------|
 | **Name** | Inferred from the Rust type or from the JSON-RPC positional index |
-| **Type** | Mapped from the Rust type (e.g. `Address` → `DATA, 20 bytes`, `U256` → `QUANTITY`, `BlockSpec` → `BlockSpec`) |
+| **Type** | Parsed from the backtick-quoted prefix of the field doc comment |
 | **Required** | `Option<T>` → No, everything else → Yes |
-| **Description** | The field's `///` doc comment text |
+| **Description** | Everything after the `` `TYPE` - `` prefix |
 
 Default values (e.g. `default = "optional_block_spec::latest"`) should be
-mentioned in the field doc comment itself (e.g. "Defaults to `\"latest\"`").
+mentioned in the description portion (e.g. "Defaults to `\"latest\"`").
 
 ### Section rules
 
