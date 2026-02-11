@@ -30,7 +30,6 @@ mod optional_block_spec {
 #[derive_where(Clone, Debug, PartialEq; ChainSpecT::RpcCallRequest, ChainSpecT::RpcTransactionRequest)]
 #[serde(bound = "", tag = "method", content = "params")]
 pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
-    // ── Standard Ethereum Methods (`eth_*`) ──
     /// # `eth_accounts`
     ///
     /// Returns a list of addresses owned by the provider.
@@ -51,7 +50,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_accounts", with = "edr_eth::serde::empty_params")]
     Accounts(()),
-
     /// # `eth_blobBaseFee`
     ///
     /// Returns the expected base fee per blob gas for the next block.
@@ -69,7 +67,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_blobBaseFee", with = "edr_eth::serde::empty_params")]
     BlobBaseFee(()),
-
     /// # `eth_blockNumber`
     ///
     /// Returns the number of the most recent block.
@@ -87,7 +84,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_blockNumber", with = "edr_eth::serde::empty_params")]
     BlockNumber(()),
-
     /// # `eth_call`
     ///
     /// Executes a new message call immediately without creating a transaction
@@ -139,7 +135,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         Option<StateOverrideOptions>,
     ),
-
     /// # `eth_chainId`
     ///
     /// Returns the chain ID used for signing replay-protected transactions.
@@ -157,7 +152,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_chainId", with = "edr_eth::serde::empty_params")]
     ChainId(()),
-
     /// # `eth_coinbase`
     ///
     /// Returns the address of the coinbase (block beneficiary).
@@ -175,7 +169,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_coinbase", with = "edr_eth::serde::empty_params")]
     Coinbase(()),
-
     /// # `eth_estimateGas`
     ///
     /// Generates and returns an estimate of the gas required to execute a
@@ -220,7 +213,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<BlockSpec>,
     ),
-
     /// # `eth_sign`
     ///
     /// Calculates an Ethereum-specific signature with:
@@ -255,7 +247,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA` - Message data to sign.
         Bytes,
     ),
-
     /// # `eth_feeHistory`
     ///
     /// Returns a collection of historical gas information for the requested
@@ -303,7 +294,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// fees.
         Vec<f64>,
     ),
-
     /// # `eth_gasPrice`
     ///
     /// Returns the current gas price in wei.
@@ -321,7 +311,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_gasPrice", with = "edr_eth::serde::empty_params")]
     GasPrice(()),
-
     /// # `eth_getBalance`
     ///
     /// Returns the balance of the account at the given address.
@@ -362,7 +351,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<BlockSpec>,
     ),
-
     /// # `eth_getBlockByNumber`
     ///
     /// Returns information about a block by block number.
@@ -406,7 +394,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `false`, returns only transaction hashes.
         bool,
     ),
-
     /// # `eth_getBlockByHash`
     ///
     /// Returns information about a block by block hash.
@@ -445,7 +432,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `false`, returns only transaction hashes.
         bool,
     ),
-
     /// # `eth_getBlockTransactionCountByHash`
     ///
     /// Returns the number of transactions in a block identified by block
@@ -477,7 +463,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 32 bytes` - Hash of a block.
         B256,
     ),
-
     /// # `eth_getBlockTransactionCountByNumber`
     ///
     /// Returns the number of transactions in a block identified by block
@@ -514,7 +499,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// format.
         PreEip1898BlockSpec,
     ),
-
     /// # `eth_getCode`
     ///
     /// Returns the bytecode stored at the given address.
@@ -556,7 +540,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<BlockSpec>,
     ),
-
     /// # `eth_getFilterChanges`
     ///
     /// Polling method for a filter. Returns an array of logs, block hashes,
@@ -588,7 +571,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `eth_newBlockFilter`, or `eth_newPendingTransactionFilter`.
         U256,
     ),
-
     /// # `eth_getFilterLogs`
     ///
     /// Returns an array of all logs matching a filter with the given ID.
@@ -617,7 +599,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The filter ID returned by `eth_newFilter`.
         U256,
     ),
-
     /// # `eth_getLogs`
     ///
     /// Returns an array of all logs matching a given filter object.
@@ -717,7 +698,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<BlockSpec>,
     ),
-
     /// # `eth_getTransactionByBlockHashAndIndex`
     ///
     /// Returns information about a transaction by block hash and transaction
@@ -758,7 +738,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The transaction index position.
         U256,
     ),
-
     /// # `eth_getTransactionByBlockNumberAndIndex`
     ///
     /// Returns information about a transaction by block number and
@@ -800,7 +779,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The transaction index position.
         U256,
     ),
-
     /// # `eth_getTransactionByHash`
     ///
     /// Returns information about a transaction by transaction hash.
@@ -834,7 +812,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 32 bytes` - The transaction hash.
         B256,
     ),
-
     /// # `eth_getTransactionCount`
     ///
     /// Returns the number of transactions (nonce) sent from an address.
@@ -875,7 +852,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<BlockSpec>,
     ),
-
     /// # `eth_getTransactionReceipt`
     ///
     /// Returns the receipt of a transaction by transaction hash. Only
@@ -913,7 +889,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 32 bytes` - The transaction hash.
         B256,
     ),
-
     /// # `eth_maxPriorityFeePerGas`
     ///
     /// Returns a suggested priority fee per gas (tip) for EIP-1559
@@ -939,8 +914,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         with = "edr_eth::serde::empty_params"
     )]
     MaxPriorityFeePerGas(()),
-
-    // ── Network Methods (`net_*`) ──
     /// # `net_version`
     ///
     /// Returns the current network ID.
@@ -958,8 +931,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "net_version", with = "edr_eth::serde::empty_params")]
     NetVersion(()),
-
-    // ── Filter and Subscription Methods ──
     /// # `eth_newBlockFilter`
     ///
     /// Creates a filter in the node that notifies when a new block arrives.
@@ -978,7 +949,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "eth_newBlockFilter", with = "edr_eth::serde::empty_params")]
     NewBlockFilter(()),
-
     /// # `eth_newFilter`
     ///
     /// Creates a filter object based on filter options, to notify when the
@@ -1014,7 +984,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `address`, `topics`, and `blockHash`.
         LogFilterOptions,
     ),
-
     /// # `eth_newPendingTransactionFilter`
     ///
     /// Creates a filter in the node that notifies when new pending
@@ -1037,7 +1006,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         with = "edr_eth::serde::empty_params"
     )]
     NewPendingTransactionFilter(()),
-
     /// # `eth_pendingTransactions`
     ///
     /// Returns all pending transactions in the transaction pool.
@@ -1058,7 +1026,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         with = "edr_eth::serde::empty_params"
     )]
     PendingTransactions(()),
-
     /// # `eth_sendRawTransaction`
     ///
     /// Submits a pre-signed, RLP-encoded transaction for broadcast.
@@ -1086,7 +1053,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA` - The signed, RLP-encoded transaction data.
         Bytes,
     ),
-
     /// # `eth_sendTransaction`
     ///
     /// Creates a new message call transaction or a contract creation, signs
@@ -1121,8 +1087,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `Object` - The transaction request object.
         ChainSpecT::RpcTransactionRequest,
     ),
-
-    // ── Signing Methods ──
     /// # `personal_sign`
     ///
     /// Calculates an Ethereum-specific signature with:
@@ -1162,7 +1126,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
         Address,
     ),
-
     /// # `eth_signTypedData_v4`
     ///
     /// Signs typed structured data according to EIP-712. The signing account
@@ -1205,7 +1168,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(deserialize_with = "crate::requests::serde::deserialize_typed_data")]
         TypedData,
     ),
-
     /// # `eth_subscribe`
     ///
     /// Starts a subscription to a particular event. For each matching event,
@@ -1240,7 +1202,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         Option<LogFilterOptions>,
     ),
-
     /// # `eth_syncing`
     ///
     /// Returns whether the node is syncing.
@@ -1263,7 +1224,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// - Always returns `false`.
     #[serde(rename = "eth_syncing", with = "edr_eth::serde::empty_params")]
     Syncing(()),
-
     /// # `eth_uninstallFilter`
     ///
     /// Uninstalls a filter with the given ID. Should always be called when
@@ -1293,7 +1253,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The filter ID.
         U256,
     ),
-
     /// # `eth_unsubscribe`
     ///
     /// Cancels a subscription with the given ID.
@@ -1321,8 +1280,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The subscription ID.
         U256,
     ),
-
-    // ── Web3 Methods (`web3_*`) ──
     /// # `web3_clientVersion`
     ///
     /// Returns the current client version.
@@ -1340,7 +1297,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "web3_clientVersion", with = "edr_eth::serde::empty_params")]
     Web3ClientVersion(()),
-
     /// # `web3_sha3`
     ///
     /// Returns the Keccak-256 hash of the given data.
@@ -1367,8 +1323,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA` - The data to hash.
         Bytes,
     ),
-
-    // ── EVM Methods (`evm_*`) ──
     /// # `evm_increaseTime`
     ///
     /// Jumps forward in time by the given amount of seconds. Returns the
@@ -1401,7 +1355,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The number of seconds to increase the time by.
         Timestamp,
     ),
-
     /// # `evm_mine`
     ///
     /// Mines a single block, including as many transactions from the
@@ -1432,7 +1385,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// provided, the block timestamp is determined automatically.
         Option<Timestamp>,
     ),
-
     /// # `evm_revert`
     ///
     /// Reverts the state of the blockchain to a previous snapshot. Takes a
@@ -1461,7 +1413,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The snapshot ID to revert to.
         U64,
     ),
-
     /// # `evm_setAutomine`
     ///
     /// Enables or disables automatic mining of new blocks with each new
@@ -1489,7 +1440,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `Boolean` - `true` to enable automining, `false` to disable.
         bool,
     ),
-
     /// # `evm_setBlockGasLimit`
     ///
     /// Sets the block gas limit for future blocks.
@@ -1520,7 +1470,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The new block gas limit. Must be greater than zero.
         U64,
     ),
-
     /// # `evm_setIntervalMining`
     ///
     /// Enables or configures automatic block mining at a fixed interval.
@@ -1562,7 +1511,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// disable.
         IntervalConfig,
     ),
-
     /// # `evm_setNextBlockTimestamp`
     ///
     /// Sets the timestamp of the next block. The timestamp must be greater
@@ -1598,7 +1546,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// epoch).
         Timestamp,
     ),
-
     /// # `evm_snapshot`
     ///
     /// Creates a snapshot of the current state of the blockchain. Returns a
@@ -1618,8 +1565,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "evm_snapshot", with = "edr_eth::serde::empty_params")]
     EvmSnapshot(()),
-
-    // ── Debug Methods (`debug_*`) ──
     /// # `debug_traceCall`
     ///
     /// Runs an `eth_call` within the context of a given block and returns
@@ -1675,7 +1620,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(default)]
         Option<GethDebugTracingOptions>,
     ),
-
     /// # `debug_traceTransaction`
     ///
     /// Returns detailed trace information about a previously mined
@@ -1720,8 +1664,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(default)]
         Option<GethDebugTracingOptions>,
     ),
-
-    // ── Hardhat Methods (`hardhat_*`) ──
     /// # `hardhat_dropTransaction`
     ///
     /// Removes a transaction from the transaction pool. Fails if the
@@ -1750,7 +1692,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 32 bytes` - The hash of the pending transaction to drop.
         B256,
     ),
-
     /// # `hardhat_getAutomine`
     ///
     /// Returns whether automatic mining is enabled.
@@ -1768,7 +1709,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "hardhat_getAutomine", with = "edr_eth::serde::empty_params")]
     GetAutomine(()),
-
     /// # `hardhat_impersonateAccount`
     ///
     /// Allows sending transactions on behalf of the given address, even if
@@ -1800,7 +1740,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 20 bytes` - The address to impersonate.
         RpcAddress,
     ),
-
     /// # `hardhat_metadata`
     ///
     /// Returns metadata about the provider instance, including client
@@ -1827,7 +1766,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```
     #[serde(rename = "hardhat_metadata", with = "edr_eth::serde::empty_params")]
     Metadata(()),
-
     /// # `hardhat_mine`
     ///
     /// Mines one or more blocks with an optional fixed time interval
@@ -1870,7 +1808,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<u64>,
     ),
-
     /// # `hardhat_setBalance`
     ///
     /// Modifies the balance of an account.
@@ -1904,7 +1841,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(deserialize_with = "crate::requests::serde::deserialize_quantity")]
         U256,
     ),
-
     /// # `hardhat_setCode`
     ///
     /// Modifies the bytecode stored at an account's address.
@@ -1938,7 +1874,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(deserialize_with = "crate::requests::serde::deserialize_data")]
         Bytes,
     ),
-
     /// # `hardhat_setCoinbase`
     ///
     /// Sets the coinbase address to be used in new blocks.
@@ -1966,7 +1901,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
         Address,
     ),
-
     /// # `hardhat_setLoggingEnabled`
     ///
     /// Enables or disables logging of JSON-RPC requests and EVM execution.
@@ -1996,7 +1930,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `Boolean` - `true` to enable logging, `false` to disable it.
         bool,
     ),
-
     /// # `hardhat_setMinGasPrice`
     ///
     /// Sets the minimum gas price accepted by the miner for transaction
@@ -2029,7 +1962,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The minimum gas price in wei.
         U128,
     ),
-
     /// # `hardhat_setNextBlockBaseFeePerGas`
     ///
     /// Sets the base fee per gas for the next block.
@@ -2064,7 +1996,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `QUANTITY` - The base fee per gas in wei.
         U128,
     ),
-
     /// # `hardhat_setNonce`
     ///
     /// Modifies the nonce of an account. The new nonce must be greater than
@@ -2102,7 +2033,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         u64,
     ),
-
     /// # `hardhat_setPrevRandao`
     ///
     /// Sets the `PREVRANDAO` value of the next block.
@@ -2129,7 +2059,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// `DATA, 32 bytes` - The `PREVRANDAO` value for the next block.
         B256,
     ),
-
     /// # `hardhat_setStorageAt`
     ///
     /// Writes a single position of the storage of an account.
@@ -2172,7 +2101,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         #[serde(with = "crate::requests::serde::storage_value")]
         U256,
     ),
-
     /// # `hardhat_stopImpersonatingAccount`
     ///
     /// Stops impersonating an account previously impersonated via
