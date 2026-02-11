@@ -25,122 +25,642 @@ mod optional_block_spec {
     }
 }
 
-/// for an invoking a method on a remote ethereum node
+/// For invoking a JSON-RPC method on a local Ethereum development node.
 #[derive(Deserialize, Serialize)]
 #[derive_where(Clone, Debug, PartialEq; ChainSpecT::RpcCallRequest, ChainSpecT::RpcTransactionRequest)]
 #[serde(bound = "", tag = "method", content = "params")]
 pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
-    /// `eth_accounts`
+    // ── Standard Ethereum Methods (`eth_*`) ──
+    /// # `eth_accounts`
+    ///
+    /// Returns a list of addresses owned by the provider.
+    ///
+    /// ## Returns
+    ///
+    /// `Array<DATA, 20 bytes>` - List of addresses owned by the provider.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0x0000000000000000000000000000000000000002"
+    /// ]
+    /// ```
     #[serde(rename = "eth_accounts", with = "edr_eth::serde::empty_params")]
     Accounts(()),
-    /// `eth_blobBaseFee`
+
+    /// # `eth_blobBaseFee`
+    ///
+    /// Returns the expected base fee per blob gas for the next block.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The base fee per blob gas in wei.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(rename = "eth_blobBaseFee", with = "edr_eth::serde::empty_params")]
     BlobBaseFee(()),
-    /// `eth_blockNumber`
+
+    /// # `eth_blockNumber`
+    ///
+    /// Returns the number of the most recent block.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The current block number.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0xa"
+    /// ```
     #[serde(rename = "eth_blockNumber", with = "edr_eth::serde::empty_params")]
     BlockNumber(()),
-    /// `eth_call`
+
+    /// # `eth_call`
+    ///
+    /// Executes a new message call immediately without creating a transaction
+    /// on the blockchain. Useful for simulating contract interactions.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA` - The return value of the executed contract call.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "to": "0x0000000000000000000000000000000000000001",
+    ///     "data": "0x70a08231000000000000000000000000000000000000000000000000000000000000dead"
+    ///   },
+    ///   "latest"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0000000000000000000000000000000000000000000000000000000000000001"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Supports an optional third parameter for state overrides.
+    /// - If no `from` is provided, uses the default caller address.
+    /// - Gas price defaults to `0` for call requests.
     #[serde(rename = "eth_call")]
     Call(
+        /// `Object` - The transaction call object.
         ChainSpecT::RpcCallRequest,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::latest"
         )]
         Option<BlockSpec>,
-        #[serde(default, skip_serializing_if = "Option::is_none")] Option<StateOverrideOptions>,
+        /// `Object` - State override set. Allows overriding balance, nonce,
+        /// code, and storage of accounts during the call.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        Option<StateOverrideOptions>,
     ),
-    /// `eth_chainId`
+
+    /// # `eth_chainId`
+    ///
+    /// Returns the chain ID used for signing replay-protected transactions.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The current chain ID.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x539"
+    /// ```
     #[serde(rename = "eth_chainId", with = "edr_eth::serde::empty_params")]
     ChainId(()),
-    /// `eth_coinbase`
+
+    /// # `eth_coinbase`
+    ///
+    /// Returns the address of the coinbase (block beneficiary).
+    ///
+    /// ## Returns
+    ///
+    /// `DATA, 20 bytes` - The coinbase address.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0000000000000000000000000000000000000001"
+    /// ```
     #[serde(rename = "eth_coinbase", with = "edr_eth::serde::empty_params")]
     Coinbase(()),
-    /// `eth_estimateGas`
+
+    /// # `eth_estimateGas`
+    ///
+    /// Generates and returns an estimate of the gas required to execute a
+    /// transaction. The transaction will not be added to the blockchain.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The estimated amount of gas needed.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "from": "0x0000000000000000000000000000000000000001",
+    ///     "to": "0x0000000000000000000000000000000000000002",
+    ///     "value": "0xde0b6b3a7640000"
+    ///   }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x5208"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"pending"` when omitted.
     #[serde(rename = "eth_estimateGas")]
     EstimateGas(
+        /// `Object` - The transaction call object.
         ChainSpecT::RpcCallRequest,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"pending"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::pending"
         )]
         Option<BlockSpec>,
     ),
-    /// `eth_sign`
+
+    /// # `eth_sign`
+    ///
+    /// Calculates an Ethereum-specific signature with:
+    /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
+    /// message)))`.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA` - The signature bytes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0x48656c6c6f"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0xa3f207...ee01b"
+    /// ```
     #[serde(rename = "eth_sign")]
     EthSign(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address of the account to sign with.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `DATA` - Message data to sign.
         Bytes,
     ),
-    /// `eth_feeHistory`
+
+    /// # `eth_feeHistory`
+    ///
+    /// Returns a collection of historical gas information for the requested
+    /// block range, including base fee per gas and effective priority fee.
+    ///
+    /// ## Returns
+    ///
+    /// `Object` - Fee history result containing `oldestBlock`,
+    /// `baseFeePerGas`, `gasUsedRatio`, and optionally `reward` arrays.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x5", "latest", [25, 75]]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "oldestBlock": "0x1",
+    ///   "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
+    ///   "gasUsedRatio": [0.5],
+    ///   "reward": [["0x3b9aca00", "0x3b9aca00"]]
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Only available on London hardfork or later.
+    /// - Block count must be between 1 and 1024.
+    /// - Reward percentiles must be floats between 0 and 100 in non-decreasing
+    ///   order.
     #[serde(rename = "eth_feeHistory")]
     FeeHistory(
-        /// block count
+        /// `QUANTITY` - Number of blocks in the requested range. Must be
+        /// between 1 and 1024.
         U256,
-        /// newest block
+        /// `BlockSpec` - Newest block in the requested range.
         BlockSpec,
-        /// reward percentiles
+        /// `Array<float>` - Monotonically increasing list of percentile
+        /// values (0-100) to sample from each block's effective priority
+        /// fees.
         Vec<f64>,
     ),
-    /// `eth_gasPrice`
+
+    /// # `eth_gasPrice`
+    ///
+    /// Returns the current gas price in wei.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The current gas price in wei.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x3b9aca00"
+    /// ```
     #[serde(rename = "eth_gasPrice", with = "edr_eth::serde::empty_params")]
     GasPrice(()),
-    /// `eth_getBalance`
+
+    /// # `eth_getBalance`
+    ///
+    /// Returns the balance of the account at the given address.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The balance of the account in wei.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0234c8a3397aab58"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
+    ///   the current hardfork.
     #[serde(rename = "eth_getBalance")]
     GetBalance(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address to check the balance of.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::latest"
         )]
         Option<BlockSpec>,
     ),
-    /// `eth_getBlockByNumber`
+
+    /// # `eth_getBlockByNumber`
+    ///
+    /// Returns information about a block by block number.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A block object, or `null` when no block was found.
+    /// When `hydrated` is `true`, the block contains full transaction
+    /// objects; when `false`, only transaction hashes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1", false]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "number": "0x1",
+    ///   "hash": "0x000...001",
+    ///   "parentHash": "0x000...000",
+    ///   "transactions": ["0xabc..."]
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Does not accept EIP-1898 block specifications.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
+    ///   the current hardfork.
     #[serde(rename = "eth_getBlockByNumber")]
     GetBlockByNumber(
+        /// `BlockSpec` - Block number or tag (`"latest"`, `"earliest"`,
+        /// `"pending"`). Does not accept EIP-1898 format.
         PreEip1898BlockSpec,
-        /// include transaction data
+        /// `Boolean` - If `true`, returns full transaction objects; if
+        /// `false`, returns only transaction hashes.
         bool,
     ),
-    /// `eth_getBlockByHash`
+
+    /// # `eth_getBlockByHash`
+    ///
+    /// Returns information about a block by block hash.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A block object, or `null` when no block was found.
+    /// When `hydrated` is `true`, the block contains full transaction
+    /// objects; when `false`, only transaction hashes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///   true
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "number": "0x1",
+    ///   "hash": "0x000...001",
+    ///   "transactions": [{ "hash": "0xabc...", "from": "0x..." }]
+    /// }
+    /// ```
     #[serde(rename = "eth_getBlockByHash")]
     GetBlockByHash(
-        /// hash
+        /// `DATA, 32 bytes` - Hash of a block.
         B256,
-        /// include transaction data
+        /// `Boolean` - If `true`, returns full transaction objects; if
+        /// `false`, returns only transaction hashes.
         bool,
     ),
-    /// `eth_getBlockTransactionCountByHash`
+
+    /// # `eth_getBlockTransactionCountByHash`
+    ///
+    /// Returns the number of transactions in a block identified by block
+    /// hash.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY|null` - Number of transactions in the block, or `null` if
+    /// the block was not found.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x5"
+    /// ```
     #[serde(
         rename = "eth_getBlockTransactionCountByHash",
         with = "edr_eth::serde::sequence"
     )]
-    GetBlockTransactionCountByHash(B256),
-    /// `eth_getBlockTransactionCountByNumber`
+    GetBlockTransactionCountByHash(
+        /// `DATA, 32 bytes` - Hash of a block.
+        B256,
+    ),
+
+    /// # `eth_getBlockTransactionCountByNumber`
+    ///
+    /// Returns the number of transactions in a block identified by block
+    /// number.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY|null` - Number of transactions in the block, or `null` if
+    /// the block was not found.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x5"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Does not accept EIP-1898 block specifications.
     #[serde(
         rename = "eth_getBlockTransactionCountByNumber",
         with = "edr_eth::serde::sequence"
     )]
-    GetBlockTransactionCountByNumber(PreEip1898BlockSpec),
-    /// `eth_getCode`
+    GetBlockTransactionCountByNumber(
+        /// `BlockSpec` - Block number or tag. Does not accept EIP-1898
+        /// format.
+        PreEip1898BlockSpec,
+    ),
+
+    /// # `eth_getCode`
+    ///
+    /// Returns the bytecode stored at the given address.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA` - The bytecode at the given address, or `"0x"` for
+    /// externally-owned accounts.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x6080604052..."
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
+    ///   the current hardfork.
     #[serde(rename = "eth_getCode")]
     GetCode(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address to retrieve the code from.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::latest"
         )]
         Option<BlockSpec>,
     ),
-    /// `eth_getFilterChanges`
+
+    /// # `eth_getFilterChanges`
+    ///
+    /// Polling method for a filter. Returns an array of logs, block hashes,
+    /// or transaction hashes that occurred since the last poll, depending on
+    /// the filter type.
+    ///
+    /// ## Returns
+    ///
+    /// `Array` - Array of log objects, block hashes, or transaction hashes
+    /// depending on the filter type. Returns an empty array if no changes
+    /// occurred.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// []
+    /// ```
     #[serde(rename = "eth_getFilterChanges", with = "edr_eth::serde::sequence")]
-    GetFilterChanges(U256),
-    /// `eth_getFilterLogs`
+    GetFilterChanges(
+        /// `QUANTITY` - The filter ID returned by `eth_newFilter`,
+        /// `eth_newBlockFilter`, or `eth_newPendingTransactionFilter`.
+        U256,
+    ),
+
+    /// # `eth_getFilterLogs`
+    ///
+    /// Returns an array of all logs matching a filter with the given ID.
+    /// Unlike `eth_getFilterChanges`, returns all matching logs, not just
+    /// changes since the last poll.
+    ///
+    /// ## Returns
+    ///
+    /// `Array` - Array of log objects, or an empty array if no logs match.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// []
+    /// ```
     #[serde(rename = "eth_getFilterLogs", with = "edr_eth::serde::sequence")]
-    GetFilterLogs(U256),
-    /// `eth_getLogs`
+    GetFilterLogs(
+        /// `QUANTITY` - The filter ID returned by `eth_newFilter`.
+        U256,
+    ),
+
+    /// # `eth_getLogs`
+    ///
+    /// Returns an array of all logs matching a given filter object.
+    ///
+    /// ## Returns
+    ///
+    /// `Array` - Array of log objects, or an empty array if no logs match.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "fromBlock": "0x1",
+    ///     "toBlock": "latest",
+    ///     "address": "0x0000000000000000000000000000000000000001"
+    ///   }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "address": "0x0000000000000000000000000000000000000001",
+    ///     "topics": ["0x000..."],
+    ///     "data": "0x",
+    ///     "blockNumber": "0x1",
+    ///     "transactionHash": "0x000...",
+    ///     "logIndex": "0x0"
+    ///   }
+    /// ]
+    /// ```
     #[serde(rename = "eth_getLogs", with = "edr_eth::serde::sequence")]
-    GetLogs(LogFilterOptions),
+    GetLogs(
+        /// `Object` - The filter options: `fromBlock`, `toBlock`,
+        /// `address`, `topics`, and `blockHash`. `blockHash` is mutually
+        /// exclusive with `fromBlock`/`toBlock`.
+        LogFilterOptions,
+    ),
     /// `eth_getProof`
     #[serde(rename = "eth_getProof")]
     GetProof(
@@ -148,176 +668,1201 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         Vec<StorageKey>,
         BlockSpec,
     ),
-    /// `eth_getStorageAt`
+
+    /// # `eth_getStorageAt`
+    ///
+    /// Returns the value from a storage position at a given address.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA, 32 bytes` - The value at the given storage position,
+    /// zero-padded to 32 bytes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0x0",
+    ///   "latest"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0000000000000000000000000000000000000000000000000000000000000000"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
+    ///   the current hardfork.
     #[serde(rename = "eth_getStorageAt")]
     GetStorageAt(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_storage_slot")] U256,
+        /// `DATA, 20 bytes` - Address of the account.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `QUANTITY` - The storage slot index.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_storage_slot")]
+        U256,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::latest"
         )]
         Option<BlockSpec>,
     ),
-    /// `eth_getTransactionByBlockHashAndIndex`
+
+    /// # `eth_getTransactionByBlockHashAndIndex`
+    ///
+    /// Returns information about a transaction by block hash and transaction
+    /// index position.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A transaction object, or `null` when no transaction
+    /// was found.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///   "0x0"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "hash": "0x000...",
+    ///   "from": "0x000...",
+    ///   "to": "0x000...",
+    ///   "blockHash": "0x000...",
+    ///   "blockNumber": "0x1",
+    ///   "transactionIndex": "0x0"
+    /// }
+    /// ```
     #[serde(rename = "eth_getTransactionByBlockHashAndIndex")]
-    GetTransactionByBlockHashAndIndex(B256, U256),
-    /// `eth_getTransactionByBlockNumberAndIndex`
-    // Matching Hardhat behavior in not accepting EIP-1898 block tags
-    // https://github.com/NomicFoundation/hardhat/blob/06474681f72e1cd895abbec419f6f10be3d8e4ed/packages/hardhat-core/src/internal/hardhat-network/provider/modules/eth.ts#L775
+    GetTransactionByBlockHashAndIndex(
+        /// `DATA, 32 bytes` - Hash of a block.
+        B256,
+        /// `QUANTITY` - The transaction index position.
+        U256,
+    ),
+
+    /// # `eth_getTransactionByBlockNumberAndIndex`
+    ///
+    /// Returns information about a transaction by block number and
+    /// transaction index position.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A transaction object, or `null` when no transaction
+    /// was found.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1", "0x0"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "hash": "0x000...",
+    ///   "from": "0x000...",
+    ///   "to": "0x000...",
+    ///   "blockNumber": "0x1",
+    ///   "transactionIndex": "0x0"
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Does not accept EIP-1898 block specifications.
     #[serde(rename = "eth_getTransactionByBlockNumberAndIndex")]
-    GetTransactionByBlockNumberAndIndex(PreEip1898BlockSpec, U256),
-    /// `eth_getTransactionByHash`
+    GetTransactionByBlockNumberAndIndex(
+        /// `BlockSpec` - Block number or tag. Does not accept EIP-1898
+        /// format.
+        PreEip1898BlockSpec,
+        /// `QUANTITY` - The transaction index position.
+        U256,
+    ),
+
+    /// # `eth_getTransactionByHash`
+    ///
+    /// Returns information about a transaction by transaction hash.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A transaction object, or `null` when no transaction
+    /// was found.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "hash": "0x000...",
+    ///   "from": "0x000...",
+    ///   "to": "0x000...",
+    ///   "blockHash": "0x000...",
+    ///   "blockNumber": "0x1"
+    /// }
+    /// ```
     #[serde(rename = "eth_getTransactionByHash", with = "edr_eth::serde::sequence")]
-    GetTransactionByHash(B256),
-    /// `eth_getTransactionCount`
+    GetTransactionByHash(
+        /// `DATA, 32 bytes` - The transaction hash.
+        B256,
+    ),
+
+    /// # `eth_getTransactionCount`
+    ///
+    /// Returns the number of transactions (nonce) sent from an address.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The number of transactions sent from the address.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
+    ///   the current hardfork.
     #[serde(rename = "eth_getTransactionCount")]
     GetTransactionCount(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address to check the transaction count for.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
         #[serde(
             skip_serializing_if = "Option::is_none",
             default = "optional_block_spec::latest"
         )]
         Option<BlockSpec>,
     ),
-    /// `eth_getTransactionReceipt`
+
+    /// # `eth_getTransactionReceipt`
+    ///
+    /// Returns the receipt of a transaction by transaction hash. Only
+    /// available for mined transactions.
+    ///
+    /// ## Returns
+    ///
+    /// `Object|null` - A transaction receipt object, or `null` when the
+    /// transaction has not been mined.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "transactionHash": "0x000...",
+    ///   "blockHash": "0x000...",
+    ///   "blockNumber": "0x1",
+    ///   "status": "0x1",
+    ///   "gasUsed": "0x5208"
+    /// }
+    /// ```
     #[serde(
         rename = "eth_getTransactionReceipt",
         with = "edr_eth::serde::sequence"
     )]
-    GetTransactionReceipt(B256),
-    /// `eth_maxPriorityFeePerGas`
+    GetTransactionReceipt(
+        /// `DATA, 32 bytes` - The transaction hash.
+        B256,
+    ),
+
+    /// # `eth_maxPriorityFeePerGas`
+    ///
+    /// Returns a suggested priority fee per gas (tip) for EIP-1559
+    /// transactions.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The suggested priority fee per gas in wei.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x3b9aca00"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Always returns 1 gwei (1000000000 wei).
     #[serde(
         rename = "eth_maxPriorityFeePerGas",
         with = "edr_eth::serde::empty_params"
     )]
     MaxPriorityFeePerGas(()),
-    /// `net_version`
+
+    // ── Network Methods (`net_*`) ──
+    /// # `net_version`
+    ///
+    /// Returns the current network ID.
+    ///
+    /// ## Returns
+    ///
+    /// `String` - The current network ID as a decimal string.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "1337"
+    /// ```
     #[serde(rename = "net_version", with = "edr_eth::serde::empty_params")]
     NetVersion(()),
-    /// `eth_newBlockFilter`
+
+    // ── Filter and Subscription Methods ──
+    /// # `eth_newBlockFilter`
+    ///
+    /// Creates a filter in the node that notifies when a new block arrives.
+    /// To check if the state has changed, call `eth_getFilterChanges`.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - A filter ID.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(rename = "eth_newBlockFilter", with = "edr_eth::serde::empty_params")]
     NewBlockFilter(()),
-    /// `eth_newFilter`
+
+    /// # `eth_newFilter`
+    ///
+    /// Creates a filter object based on filter options, to notify when the
+    /// state changes (logs). To check if the state has changed, call
+    /// `eth_getFilterChanges`.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - A filter ID.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "fromBlock": "0x1",
+    ///     "toBlock": "latest",
+    ///     "address": "0x0000000000000000000000000000000000000001"
+    ///   }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(rename = "eth_newFilter", with = "edr_eth::serde::sequence")]
-    NewFilter(LogFilterOptions),
-    /// `eth_newPendingTransactionFilter`
+    NewFilter(
+        /// `Object` - The filter options: `fromBlock`, `toBlock`,
+        /// `address`, `topics`, and `blockHash`.
+        LogFilterOptions,
+    ),
+
+    /// # `eth_newPendingTransactionFilter`
+    ///
+    /// Creates a filter in the node that notifies when new pending
+    /// transactions arrive. To check if the state has changed, call
+    /// `eth_getFilterChanges`.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - A filter ID.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(
         rename = "eth_newPendingTransactionFilter",
         with = "edr_eth::serde::empty_params"
     )]
     NewPendingTransactionFilter(()),
-    /// `eth_pendingTransactions`
+
+    /// # `eth_pendingTransactions`
+    ///
+    /// Returns all pending transactions in the transaction pool.
+    ///
+    /// ## Returns
+    ///
+    /// `Array<Object>` - List of pending transaction objects.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// []
+    /// ```
     #[serde(
         rename = "eth_pendingTransactions",
         with = "edr_eth::serde::empty_params"
     )]
     PendingTransactions(()),
-    /// `eth_sendRawTransaction`
+
+    /// # `eth_sendRawTransaction`
+    ///
+    /// Submits a pre-signed, RLP-encoded transaction for broadcast.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA, 32 bytes` - The transaction hash, or the zero hash if the
+    /// transaction is not yet available.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0xf86c0a85...025a0..."]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0000000000000000000000000000000000000000000000000000000000000001"
+    /// ```
     #[serde(rename = "eth_sendRawTransaction", with = "edr_eth::serde::sequence")]
-    SendRawTransaction(Bytes),
-    /// `eth_sendTransaction`
+    SendRawTransaction(
+        /// `DATA` - The signed, RLP-encoded transaction data.
+        Bytes,
+    ),
+
+    /// # `eth_sendTransaction`
+    ///
+    /// Creates a new message call transaction or a contract creation, signs
+    /// it using the account specified in `from`, and submits it.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA, 32 bytes` - The transaction hash, or the zero hash if the
+    /// transaction is not yet available.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "from": "0x0000000000000000000000000000000000000001",
+    ///     "to": "0x0000000000000000000000000000000000000002",
+    ///     "value": "0xde0b6b3a7640000"
+    ///   }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x0000000000000000000000000000000000000000000000000000000000000001"
+    /// ```
     #[serde(rename = "eth_sendTransaction", with = "edr_eth::serde::sequence")]
-    SendTransaction(ChainSpecT::RpcTransactionRequest),
-    /// `personal_sign`
+    SendTransaction(
+        /// `Object` - The transaction request object.
+        ChainSpecT::RpcTransactionRequest,
+    ),
+
+    // ── Signing Methods ──
+    /// # `personal_sign`
+    ///
+    /// Calculates an Ethereum-specific signature with:
+    /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
+    /// message)))`. The signing account must be managed by the provider.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA` - The signature bytes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x48656c6c6f",
+    ///   "0x0000000000000000000000000000000000000001"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0xa3f207...ee01b"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Note the parameter order: message is first, address is second. This
+    ///   differs from `eth_sign` where address is first.
     #[serde(rename = "personal_sign")]
     PersonalSign(
+        /// `DATA` - Message data to sign.
         Bytes,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address of the account to sign with.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
     ),
-    /// `eth_signTypedData_v4`
+
+    /// # `eth_signTypedData_v4`
+    ///
+    /// Signs typed structured data according to EIP-712. The signing account
+    /// must be managed by the provider.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA` - The signature bytes.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   {
+    ///     "types": {
+    ///       "EIP712Domain": [{ "name": "name", "type": "string" }],
+    ///       "Mail": [{ "name": "contents", "type": "string" }]
+    ///     },
+    ///     "primaryType": "Mail",
+    ///     "domain": { "name": "Example" },
+    ///     "message": { "contents": "Hello" }
+    ///   }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0xa3f207...ee01b"
+    /// ```
     #[serde(rename = "eth_signTypedData_v4")]
     SignTypedDataV4(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_typed_data")] TypedData,
+        /// `DATA, 20 bytes` - Address of the account to sign with.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `Object` - The EIP-712 typed data to sign.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_typed_data")]
+        TypedData,
     ),
-    /// `eth_subscribe`
+
+    /// # `eth_subscribe`
+    ///
+    /// Starts a subscription to a particular event. For each matching event,
+    /// a notification with relevant data is sent. Only available on
+    /// WebSocket connections.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - A subscription ID used for identifying and
+    /// unsubscribing.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["newHeads"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(rename = "eth_subscribe")]
     Subscribe(
+        /// `String` - The subscription type: `"newHeads"`, `"logs"`, or
+        /// `"newPendingTransactions"`.
         SubscriptionType,
-        #[serde(default, skip_serializing_if = "Option::is_none")] Option<LogFilterOptions>,
+        /// `Object` - Filter options (only for `"logs"` subscriptions).
+        /// Required when subscription type is `"logs"`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        Option<LogFilterOptions>,
     ),
-    /// `eth_syncing`
+
+    /// # `eth_syncing`
+    ///
+    /// Returns whether the node is syncing.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `false` since the local development node is never
+    /// syncing.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// false
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Always returns `false`.
     #[serde(rename = "eth_syncing", with = "edr_eth::serde::empty_params")]
     Syncing(()),
-    /// `eth_uninstallFilter`
+
+    /// # `eth_uninstallFilter`
+    ///
+    /// Uninstalls a filter with the given ID. Should always be called when
+    /// the filter is no longer needed. Filters time out after a period of
+    /// inactivity.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if the filter was successfully uninstalled,
+    /// `false` if no filter with the given ID exists.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "eth_uninstallFilter", with = "edr_eth::serde::sequence")]
-    UninstallFilter(U256),
-    /// `eth_unsubscribe`
+    UninstallFilter(
+        /// `QUANTITY` - The filter ID.
+        U256,
+    ),
+
+    /// # `eth_unsubscribe`
+    ///
+    /// Cancels a subscription with the given ID.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if the subscription was successfully cancelled,
+    /// `false` if no subscription with the given ID exists.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "eth_unsubscribe", with = "edr_eth::serde::sequence")]
-    Unsubscribe(U256),
-    /// `web3_clientVersion`
+    Unsubscribe(
+        /// `QUANTITY` - The subscription ID.
+        U256,
+    ),
+
+    // ── Web3 Methods (`web3_*`) ──
+    /// # `web3_clientVersion`
+    ///
+    /// Returns the current client version.
+    ///
+    /// ## Returns
+    ///
+    /// `String` - The current client version string.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "edr/0.6.0/revm/19.0.0"
+    /// ```
     #[serde(rename = "web3_clientVersion", with = "edr_eth::serde::empty_params")]
     Web3ClientVersion(()),
-    /// `web3_sha3`
+
+    /// # `web3_sha3`
+    ///
+    /// Returns the Keccak-256 hash of the given data.
+    ///
+    /// ## Returns
+    ///
+    /// `DATA, 32 bytes` - The Keccak-256 hash of the input data.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x68656c6c6f"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8"
+    /// ```
     #[serde(rename = "web3_sha3", with = "edr_eth::serde::sequence")]
-    Web3Sha3(Bytes),
-    /// `evm_increaseTime`
+    Web3Sha3(
+        /// `DATA` - The data to hash.
+        Bytes,
+    ),
+
+    // ── EVM Methods (`evm_*`) ──
+    /// # `evm_increaseTime`
+    ///
+    /// Jumps forward in time by the given amount of seconds. Returns the
+    /// total time adjustment, in seconds.
+    ///
+    /// ## Returns
+    ///
+    /// `String` - The total time offset in seconds, as a decimal string.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [60]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "60"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Returns a decimal string, not a hex-encoded quantity.
+    /// - The returned value is the total time offset, not the increment.
     #[serde(rename = "evm_increaseTime", with = "edr_eth::serde::sequence")]
-    EvmIncreaseTime(Timestamp),
-    /// `evm_mine`
+    EvmIncreaseTime(
+        /// `QUANTITY` - The number of seconds to increase the time by.
+        Timestamp,
+    ),
+
+    /// # `evm_mine`
+    ///
+    /// Mines a single block, including as many transactions from the
+    /// transaction pool as possible.
+    ///
+    /// ## Returns
+    ///
+    /// `String` - Always returns `"0"`.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Returns the string `"0"`, not a hex-encoded quantity.
     #[serde(
         rename = "evm_mine",
         serialize_with = "optional_single_to_sequence",
         deserialize_with = "sequence_to_optional_single"
     )]
-    EvmMine(Option<Timestamp>),
-    /// `evm_revert`
+    EvmMine(
+        /// `QUANTITY` - Optional timestamp for the mined block. If not
+        /// provided, the block timestamp is determined automatically.
+        Option<Timestamp>,
+    ),
+
+    /// # `evm_revert`
+    ///
+    /// Reverts the state of the blockchain to a previous snapshot. Takes a
+    /// single parameter, which is the snapshot ID to revert to.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if a snapshot was reverted, `false` if the
+    /// snapshot ID is invalid.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "evm_revert", with = "edr_eth::serde::sequence")]
-    EvmRevert(U64),
-    /// `evm_setAutomine`
+    EvmRevert(
+        /// `QUANTITY` - The snapshot ID to revert to.
+        U64,
+    ),
+
+    /// # `evm_setAutomine`
+    ///
+    /// Enables or disables automatic mining of new blocks with each new
+    /// transaction submitted to the provider.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [true]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "evm_setAutomine", with = "edr_eth::serde::sequence")]
-    EvmSetAutomine(bool),
-    /// `evm_setBlockGasLimit`
+    EvmSetAutomine(
+        /// `Boolean` - `true` to enable automining, `false` to disable.
+        bool,
+    ),
+
+    /// # `evm_setBlockGasLimit`
+    ///
+    /// Sets the block gas limit for future blocks.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x1c9c380"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The gas limit must be greater than zero.
     #[serde(rename = "evm_setBlockGasLimit", with = "edr_eth::serde::sequence")]
-    EvmSetBlockGasLimit(U64),
-    /// `evm_setIntervalMining`
+    EvmSetBlockGasLimit(
+        /// `QUANTITY` - The new block gas limit. Must be greater than zero.
+        U64,
+    ),
+
+    /// # `evm_setIntervalMining`
+    ///
+    /// Enables or configures automatic block mining at a fixed interval.
+    /// Can also accept a range for randomized intervals.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params (fixed interval):**
+    ///
+    /// ```json
+    /// [5000]
+    /// ```
+    ///
+    /// **Params (random interval range):**
+    ///
+    /// ```json
+    /// [[3000, 6000]]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Pass `0` to disable interval mining.
+    /// - The interval is specified in milliseconds.
+    /// - A two-element array `[min, max]` sets a random interval range.
     #[serde(rename = "evm_setIntervalMining", with = "edr_eth::serde::sequence")]
-    EvmSetIntervalMining(IntervalConfig),
-    /// `evm_setNextBlockTimestamp`
+    EvmSetIntervalMining(
+        /// `QUANTITY|Array` - The interval in milliseconds, or a
+        /// two-element `[min, max]` array for a random range. Pass `0` to
+        /// disable.
+        IntervalConfig,
+    ),
+
+    /// # `evm_setNextBlockTimestamp`
+    ///
+    /// Sets the timestamp of the next block. The timestamp must be greater
+    /// than the current block's timestamp.
+    ///
+    /// ## Returns
+    ///
+    /// `String` - The new timestamp as a decimal string.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [1700000000]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "1700000000"
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Returns a decimal string, not a hex-encoded quantity.
     #[serde(
         rename = "evm_setNextBlockTimestamp",
         with = "edr_eth::serde::sequence"
     )]
-    EvmSetNextBlockTimestamp(Timestamp),
-    /// `evm_snapshot`
+    EvmSetNextBlockTimestamp(
+        /// `QUANTITY` - The timestamp for the next block (in seconds since
+        /// epoch).
+        Timestamp,
+    ),
+
+    /// # `evm_snapshot`
+    ///
+    /// Creates a snapshot of the current state of the blockchain. Returns a
+    /// snapshot ID that can later be used with `evm_revert` to restore
+    /// this state.
+    ///
+    /// ## Returns
+    ///
+    /// `QUANTITY` - The snapshot ID.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// "0x1"
+    /// ```
     #[serde(rename = "evm_snapshot", with = "edr_eth::serde::empty_params")]
     EvmSnapshot(()),
 
-    // `debug_traceCall`
+    // ── Debug Methods (`debug_*`) ──
+    /// # `debug_traceCall`
+    ///
+    /// Runs an `eth_call` within the context of a given block and returns
+    /// detailed trace information about the execution.
+    ///
+    /// ## Returns
+    ///
+    /// `Object` - A trace result object containing `gasUsed`, `pass`,
+    /// `output`, and `structLogs`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   {
+    ///     "to": "0x0000000000000000000000000000000000000001",
+    ///     "data": "0x70a08231"
+    ///   },
+    ///   "latest",
+    ///   { "disableMemory": true }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "pass": true,
+    ///   "gasUsed": 21000,
+    ///   "output": "0x",
+    ///   "structLogs": []
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The block parameter defaults to `"latest"` when omitted.
+    /// - Only the default tracer is supported.
     // TODO: Add support for `GethDebugTracingCallOptions`
     // <https://geth.ethereum.org/docs/interacting-with-geth/rpc/ns-debug#debugtracecall>
     #[serde(rename = "debug_traceCall")]
     DebugTraceCall(
+        /// `Object` - The transaction call object.
         ChainSpecT::RpcCallRequest,
-        #[serde(default)] Option<BlockSpec>,
-        #[serde(default)] Option<GethDebugTracingOptions>,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
+        /// Defaults to `"latest"`.
+        #[serde(default)]
+        Option<BlockSpec>,
+        /// `Object` - Trace configuration with optional `disableStorage`,
+        /// `disableMemory`, `disableStack` fields.
+        #[serde(default)]
+        Option<GethDebugTracingOptions>,
     ),
-    // `debug_traceTransaction`
+
+    /// # `debug_traceTransaction`
+    ///
+    /// Returns detailed trace information about a previously mined
+    /// transaction.
+    ///
+    /// ## Returns
+    ///
+    /// `Object` - A trace result object containing `gasUsed`, `pass`,
+    /// `output`, and `structLogs`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///   { "disableStorage": true }
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "pass": true,
+    ///   "gasUsed": 21000,
+    ///   "output": "0x",
+    ///   "structLogs": []
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Only the default tracer is supported.
     #[serde(rename = "debug_traceTransaction")]
-    DebugTraceTransaction(B256, #[serde(default)] Option<GethDebugTracingOptions>),
-    /// `hardhat_dropTransaction`
+    DebugTraceTransaction(
+        /// `DATA, 32 bytes` - The hash of the transaction to trace.
+        B256,
+        /// `Object` - Trace configuration with optional `disableStorage`,
+        /// `disableMemory`, `disableStack` fields.
+        #[serde(default)]
+        Option<GethDebugTracingOptions>,
+    ),
+
+    // ── Hardhat Methods (`hardhat_*`) ──
+    /// # `hardhat_dropTransaction`
+    ///
+    /// Removes a transaction from the transaction pool. Fails if the
+    /// transaction has already been mined.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if the transaction was removed, `false` if the
+    /// transaction was not in the pool.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_dropTransaction", with = "edr_eth::serde::sequence")]
-    DropTransaction(B256),
-    /// `hardhat_getAutomine`
+    DropTransaction(
+        /// `DATA, 32 bytes` - The hash of the pending transaction to drop.
+        B256,
+    ),
+
+    /// # `hardhat_getAutomine`
+    ///
+    /// Returns whether automatic mining is enabled.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if automining is enabled, `false` otherwise.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_getAutomine", with = "edr_eth::serde::empty_params")]
     GetAutomine(()),
-    /// `hardhat_impersonateAccount`
+
+    /// # `hardhat_impersonateAccount`
+    ///
+    /// Allows sending transactions on behalf of the given address, even if
+    /// the private key is not available. The impersonated account does not
+    /// need to have any balance to send transactions.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(
         rename = "hardhat_impersonateAccount",
         with = "edr_eth::serde::sequence"
     )]
-    ImpersonateAccount(RpcAddress),
-    /// `hardhat_metadata`
+    ImpersonateAccount(
+        /// `DATA, 20 bytes` - The address to impersonate.
+        RpcAddress,
+    ),
+
+    /// # `hardhat_metadata`
+    ///
+    /// Returns metadata about the provider instance, including client
+    /// version, chain ID, instance ID, and latest block information.
+    ///
+    /// ## Returns
+    ///
+    /// `Object` - Metadata object containing `clientVersion`, `chainId`,
+    /// `instanceId`, `latestBlockNumber`, `latestBlockHash`, and optionally
+    /// `forkedNetwork`.
+    ///
+    /// ## Example
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// {
+    ///   "clientVersion": "edr/0.6.0/revm/19.0.0",
+    ///   "chainId": 1337,
+    ///   "instanceId": "0x000...",
+    ///   "latestBlockNumber": 10,
+    ///   "latestBlockHash": "0x000..."
+    /// }
+    /// ```
     #[serde(rename = "hardhat_metadata", with = "edr_eth::serde::empty_params")]
     Metadata(()),
-    /// `hardhat_mine`
+
+    /// # `hardhat_mine`
+    ///
+    /// Mines one or more blocks with an optional fixed time interval
+    /// between them.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0xa", "0x3c"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Block count defaults to `1` when omitted.
+    /// - Interval defaults to `1` second when omitted.
+    /// - Both parameters are hex-encoded.
     #[serde(rename = "hardhat_mine")]
     Mine(
-        /// block count:
+        /// `QUANTITY` - Number of blocks to mine. Defaults to `1`.
         #[serde(default, with = "alloy_serde::quantity::opt")]
         Option<u64>,
-        /// interval:
+        /// `QUANTITY` - Interval in seconds between each mined block.
+        /// Defaults to `1`.
         #[serde(
             default,
             skip_serializing_if = "Option::is_none",
@@ -325,62 +1870,340 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         )]
         Option<u64>,
     ),
-    /// `hardhat_setBalance`
+
+    /// # `hardhat_setBalance`
+    ///
+    /// Modifies the balance of an account.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0xde0b6b3a7640000"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_setBalance")]
     SetBalance(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_quantity")] U256,
+        /// `DATA, 20 bytes` - The address whose balance to set.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `QUANTITY` - The new balance in wei.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_quantity")]
+        U256,
     ),
-    /// `hardhat_setCode`
+
+    /// # `hardhat_setCode`
+    ///
+    /// Modifies the bytecode stored at an account's address.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0x6080604052..."
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_setCode")]
     SetCode(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_data")] Bytes,
+        /// `DATA, 20 bytes` - The address where the code should be stored.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `DATA` - The new bytecode.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_data")]
+        Bytes,
     ),
-    /// `hardhat_setCoinbase`
+
+    /// # `hardhat_setCoinbase`
+    ///
+    /// Sets the coinbase address to be used in new blocks.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_setCoinbase", with = "edr_eth::serde::sequence")]
-    SetCoinbase(#[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address),
-    /// `hardhat_setLoggingEnabled`
+    SetCoinbase(
+        /// `DATA, 20 bytes` - The new coinbase address.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+    ),
+
+    /// # `hardhat_setLoggingEnabled`
+    ///
+    /// Enables or disables logging of JSON-RPC requests and EVM execution.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [true]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(
         rename = "hardhat_setLoggingEnabled",
         with = "edr_eth::serde::sequence"
     )]
-    SetLoggingEnabled(bool),
-    /// `hardhat_setMinGasPrice`
+    SetLoggingEnabled(
+        /// `Boolean` - `true` to enable logging, `false` to disable it.
+        bool,
+    ),
+
+    /// # `hardhat_setMinGasPrice`
+    ///
+    /// Sets the minimum gas price accepted by the miner for transaction
+    /// inclusion.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x3b9aca00"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Only works on pre-EIP-1559 hardforks. Calling this on an EIP-1559+
+    ///   hardfork will return an error.
     #[serde(rename = "hardhat_setMinGasPrice", with = "edr_eth::serde::sequence")]
-    SetMinGasPrice(U128),
-    /// `hardhat_setNextBlockBaseFeePerGas`
+    SetMinGasPrice(
+        /// `QUANTITY` - The minimum gas price in wei.
+        U128,
+    ),
+
+    /// # `hardhat_setNextBlockBaseFeePerGas`
+    ///
+    /// Sets the base fee per gas for the next block.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x3b9aca00"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Only works on EIP-1559+ hardforks. Calling this on a pre-EIP-1559
+    ///   hardfork will return an error.
     #[serde(
         rename = "hardhat_setNextBlockBaseFeePerGas",
         with = "edr_eth::serde::sequence"
     )]
-    SetNextBlockBaseFeePerGas(U128),
-    /// `hardhat_setNonce`
+    SetNextBlockBaseFeePerGas(
+        /// `QUANTITY` - The base fee per gas in wei.
+        U128,
+    ),
+
+    /// # `hardhat_setNonce`
+    ///
+    /// Modifies the nonce of an account. The new nonce must be greater than
+    /// or equal to the existing nonce.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0xa"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_setNonce")]
     SetNonce(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - The address whose nonce to set.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `QUANTITY` - The new nonce value.
         #[serde(
             deserialize_with = "crate::requests::serde::deserialize_nonce",
             serialize_with = "alloy_serde::quantity::serialize"
         )]
         u64,
     ),
-    /// `hardhat_setPrevRandao`
+
+    /// # `hardhat_setPrevRandao`
+    ///
+    /// Sets the `PREVRANDAO` value of the next block.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(rename = "hardhat_setPrevRandao", with = "edr_eth::serde::sequence")]
-    SetPrevRandao(B256),
-    /// `hardhat_setStorageAt`
+    SetPrevRandao(
+        /// `DATA, 32 bytes` - The `PREVRANDAO` value for the next block.
+        B256,
+    ),
+
+    /// # `hardhat_setStorageAt`
+    ///
+    /// Writes a single position of the storage of an account.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - Always returns `true`.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// [
+    ///   "0x0000000000000000000000000000000000000001",
+    ///   "0x0",
+    ///   "0x0000000000000000000000000000000000000000000000000000000000000001"
+    /// ]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - The value must be exactly 32 bytes (zero-padded).
     #[serde(rename = "hardhat_setStorageAt")]
     SetStorageAt(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_storage_key")] U256,
-        #[serde(with = "crate::requests::serde::storage_value")] U256,
+        /// `DATA, 20 bytes` - The address of the account.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `QUANTITY` - The storage slot index.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_storage_key")]
+        U256,
+        /// `DATA, 32 bytes` - The new storage value. Must be exactly 32
+        /// bytes.
+        #[serde(with = "crate::requests::serde::storage_value")]
+        U256,
     ),
-    /// `hardhat_stopImpersonatingAccount`
+
+    /// # `hardhat_stopImpersonatingAccount`
+    ///
+    /// Stops impersonating an account previously impersonated via
+    /// `hardhat_impersonateAccount`.
+    ///
+    /// ## Returns
+    ///
+    /// `Boolean` - `true` if the account was being impersonated, `false`
+    /// otherwise.
+    ///
+    /// ## Example
+    ///
+    /// **Params:**
+    ///
+    /// ```json
+    /// ["0x0000000000000000000000000000000000000001"]
+    /// ```
+    ///
+    /// **Result:**
+    ///
+    /// ```json
+    /// true
+    /// ```
     #[serde(
         rename = "hardhat_stopImpersonatingAccount",
         with = "edr_eth::serde::sequence"
     )]
-    StopImpersonatingAccount(RpcAddress),
+    StopImpersonatingAccount(
+        /// `DATA, 20 bytes` - The address to stop impersonating.
+        RpcAddress,
+    ),
 }
 
 impl<ChainSpecT: RpcChainSpec> MethodInvocation<ChainSpecT> {
@@ -466,12 +2289,12 @@ impl<ChainSpecT: RpcChainSpec> MethodInvocation<ChainSpecT> {
     }
 }
 
-/// an input that can be either a single `u64` or an array of two `u64` values
+/// An input that can be either a single `u64` or an array of two `u64` values.
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(untagged)]
 pub enum IntervalConfig {
     /// A fixed value; or disabled, when zero.
     FixedOrDisabled(u64),
-    /// an array of two `u64` values
+    /// An array of two `u64` values representing a `[min, max]` range.
     Range([u64; 2]),
 }
