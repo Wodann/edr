@@ -87,7 +87,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// # `eth_call`
     ///
     /// Executes a new message call immediately without creating a transaction
-    /// on the blockchain. Useful for simulating contract interactions.
+    /// on the blockchain.
     ///
     /// ## Result
     ///
@@ -117,9 +117,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The block parameter defaults to `"latest"` when omitted.
     /// - Supports an optional third parameter for state overrides.
-    /// - If no `from` is provided, uses the default caller address.
+    /// - If no `from` is provided, uses the first owned account—if present—or
+    ///   alternatively the zero address as the caller.
     /// - Gas price defaults to `0` for call requests.
     #[serde(rename = "eth_call")]
     Call(
@@ -139,7 +139,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_chainId`
     ///
-    /// Returns the chain ID used for signing replay-protected transactions.
+    /// Returns the chain ID of the current network.
     ///
     /// ## Result
     ///
@@ -156,7 +156,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ChainId(()),
     /// # `eth_coinbase`
     ///
-    /// Returns the address of the coinbase (block beneficiary).
+    /// Returns the address of the coinbase.
     ///
     /// ## Result
     ///
@@ -173,8 +173,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     Coinbase(()),
     /// # `eth_estimateGas`
     ///
-    /// Generates and returns an estimate of the gas required to execute a
-    /// transaction. The transaction will not be added to the blockchain.
+    /// Generates and returns an estimate of the gas required to allow the
+    /// transaction to complete. The transaction will not be added to the
+    /// blockchain.
     ///
     /// ## Result
     ///
@@ -201,10 +202,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// "0x5208"
     /// ```
-    ///
-    /// ## Implementation details
-    ///
-    /// - The block parameter defaults to `"pending"` when omitted.
     #[serde(rename = "eth_estimateGas")]
     EstimateGas(
         /// `Object` - The transaction call object.
@@ -219,13 +216,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_sign`
     ///
-    /// Calculates an Ethereum-specific signature with:
-    /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
-    /// message)))`.
+    /// Calculates an [EIP-191] signature for the provided data.
+    ///
+    /// [EIP-191]: https://eips.ethereum.org/EIPS/eip-191
     ///
     /// ## Result
     ///
-    /// `DATA` - The signature bytes.
+    /// `DATA, 65 bytes` - The signature bytes.
     ///
     /// ## Example
     ///
