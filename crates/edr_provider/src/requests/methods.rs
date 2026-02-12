@@ -34,13 +34,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns a list of addresses owned by the provider.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Array<DATA, 20 bytes>` - List of addresses owned by the provider.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// [
@@ -54,13 +54,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the expected base fee per blob gas for the next block.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The base fee per blob gas in wei.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -71,13 +71,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the number of the most recent block.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The current block number.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0xa"
@@ -89,25 +89,27 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Executes a new message call immediately without creating a transaction
     /// on the blockchain. Useful for simulating contract interactions.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA` - The return value of the executed contract call.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "to": "0x0000000000000000000000000000000000000001",
-    ///     "data": "0x70a08231000000000000000000000000000000000000000000000000000000000000dead"
-    ///   },
-    ///   "latest"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "to": "0x0000000000000000000000000000000000000001",
+    ///       "data": "0x70a08231000000000000000000000000000000000000000000000000000000000000dead"
+    ///     },
+    ///     "latest"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000001"
@@ -139,13 +141,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the chain ID used for signing replay-protected transactions.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The current chain ID.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x539"
@@ -156,13 +158,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the address of the coinbase (block beneficiary).
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA, 20 bytes` - The coinbase address.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0000000000000000000000000000000000000001"
@@ -174,25 +176,27 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Generates and returns an estimate of the gas required to execute a
     /// transaction. The transaction will not be added to the blockchain.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The estimated amount of gas needed.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "from": "0x0000000000000000000000000000000000000001",
-    ///     "to": "0x0000000000000000000000000000000000000002",
-    ///     "value": "0xde0b6b3a7640000"
-    ///   }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "from": "0x0000000000000000000000000000000000000001",
+    ///       "to": "0x0000000000000000000000000000000000000002",
+    ///       "value": "0xde0b6b3a7640000"
+    ///     }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x5208"
@@ -219,22 +223,24 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
     /// message)))`.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA` - The signature bytes.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0x48656c6c6f"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0x48656c6c6f"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0xa3f207...ee01b"
@@ -252,20 +258,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns a collection of historical gas information for the requested
     /// block range, including base fee per gas and effective priority fee.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object` - Fee history result containing `oldestBlock`,
     /// `baseFeePerGas`, `gasUsedRatio`, and optionally `reward` arrays.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x5", "latest", [25, 75]]
+    /// {
+    ///   "params": ["0x5", "latest", [25, 75]]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -298,13 +306,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the current gas price in wei.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The current gas price in wei.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x3b9aca00"
@@ -315,19 +323,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the balance of the account at the given address.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The balance of the account in wei.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001", "latest"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0234c8a3397aab58"
@@ -355,7 +365,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns information about a block by block number.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A block object, or `null` when no block was found.
     /// When `hydrated` is `true`, the block contains full transaction
@@ -363,13 +373,15 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1", false]
+    /// {
+    ///   "params": ["0x1", false]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -398,7 +410,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns information about a block by block hash.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A block object, or `null` when no block was found.
     /// When `hydrated` is `true`, the block contains full transaction
@@ -406,16 +418,18 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
-    ///   true
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///     true
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -437,20 +451,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns the number of transactions in a block identified by block
     /// hash.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY|null` - Number of transactions in the block, or `null` if
     /// the block was not found.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x5"
@@ -468,20 +484,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns the number of transactions in a block identified by block
     /// number.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY|null` - Number of transactions in the block, or `null` if
     /// the block was not found.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x5"
@@ -503,20 +521,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the bytecode stored at the given address.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA` - The bytecode at the given address, or `"0x"` for
     /// externally-owned accounts.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001", "latest"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x6080604052..."
@@ -546,7 +566,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// or transaction hashes that occurred since the last poll, depending on
     /// the filter type.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Array` - Array of log objects, block hashes, or transaction hashes
     /// depending on the filter type. Returns an empty array if no changes
@@ -554,13 +574,15 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// []
@@ -577,19 +599,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Unlike `eth_getFilterChanges`, returns all matching logs, not just
     /// changes since the last poll.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Array` - Array of log objects, or an empty array if no logs match.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// []
@@ -603,25 +627,27 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns an array of all logs matching a given filter object.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Array` - Array of log objects, or an empty array if no logs match.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "fromBlock": "0x1",
-    ///     "toBlock": "latest",
-    ///     "address": "0x0000000000000000000000000000000000000001"
-    ///   }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "fromBlock": "0x1",
+    ///       "toBlock": "latest",
+    ///       "address": "0x0000000000000000000000000000000000000001"
+    ///     }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// [
@@ -654,24 +680,26 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the value from a storage position at a given address.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA, 32 bytes` - The value at the given storage position,
     /// zero-padded to 32 bytes.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0x0",
-    ///   "latest"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0x0",
+    ///     "latest"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -703,23 +731,25 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns information about a transaction by block hash and transaction
     /// index position.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A transaction object, or `null` when no transaction
     /// was found.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
-    ///   "0x0"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///     "0x0"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -743,20 +773,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns information about a transaction by block number and
     /// transaction index position.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A transaction object, or `null` when no transaction
     /// was found.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1", "0x0"]
+    /// {
+    ///   "params": ["0x1", "0x0"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -783,20 +815,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns information about a transaction by transaction hash.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A transaction object, or `null` when no transaction
     /// was found.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -816,19 +850,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the number of transactions (nonce) sent from an address.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The number of transactions sent from the address.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001", "latest"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001", "latest"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -857,20 +893,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns the receipt of a transaction by transaction hash. Only
     /// available for mined transactions.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object|null` - A transaction receipt object, or `null` when the
     /// transaction has not been mined.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -894,13 +932,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns a suggested priority fee per gas (tip) for EIP-1559
     /// transactions.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The suggested priority fee per gas in wei.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x3b9aca00"
@@ -918,13 +956,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the current network ID.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `String` - The current network ID as a decimal string.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "1337"
@@ -936,13 +974,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Creates a filter in the node that notifies when a new block arrives.
     /// To check if the state has changed, call `eth_getFilterChanges`.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - A filter ID.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -955,25 +993,27 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// state changes (logs). To check if the state has changed, call
     /// `eth_getFilterChanges`.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - A filter ID.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "fromBlock": "0x1",
-    ///     "toBlock": "latest",
-    ///     "address": "0x0000000000000000000000000000000000000001"
-    ///   }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "fromBlock": "0x1",
+    ///       "toBlock": "latest",
+    ///       "address": "0x0000000000000000000000000000000000000001"
+    ///     }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -990,13 +1030,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// transactions arrive. To check if the state has changed, call
     /// `eth_getFilterChanges`.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - A filter ID.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -1010,13 +1050,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns all pending transactions in the transaction pool.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Array<Object>` - List of pending transaction objects.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// []
@@ -1030,20 +1070,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Submits a pre-signed, RLP-encoded transaction for broadcast.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA, 32 bytes` - The transaction hash, or the zero hash if the
     /// transaction is not yet available.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0xf86c0a85...025a0..."]
+    /// {
+    ///   "params": ["0xf86c0a85...025a0..."]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000001"
@@ -1058,26 +1100,28 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Creates a new message call transaction or a contract creation, signs
     /// it using the account specified in `from`, and submits it.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA, 32 bytes` - The transaction hash, or the zero hash if the
     /// transaction is not yet available.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "from": "0x0000000000000000000000000000000000000001",
-    ///     "to": "0x0000000000000000000000000000000000000002",
-    ///     "value": "0xde0b6b3a7640000"
-    ///   }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "from": "0x0000000000000000000000000000000000000001",
+    ///       "to": "0x0000000000000000000000000000000000000002",
+    ///       "value": "0xde0b6b3a7640000"
+    ///     }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000001"
@@ -1093,22 +1137,24 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
     /// message)))`. The signing account must be managed by the provider.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA` - The signature bytes.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x48656c6c6f",
-    ///   "0x0000000000000000000000000000000000000001"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x48656c6c6f",
+    ///     "0x0000000000000000000000000000000000000001"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0xa3f207...ee01b"
@@ -1131,30 +1177,32 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Signs typed structured data according to EIP-712. The signing account
     /// must be managed by the provider.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA` - The signature bytes.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   {
-    ///     "types": {
-    ///       "EIP712Domain": [{ "name": "name", "type": "string" }],
-    ///       "Mail": [{ "name": "contents", "type": "string" }]
-    ///     },
-    ///     "primaryType": "Mail",
-    ///     "domain": { "name": "Example" },
-    ///     "message": { "contents": "Hello" }
-    ///   }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     {
+    ///       "types": {
+    ///         "EIP712Domain": [{ "name": "name", "type": "string" }],
+    ///         "Mail": [{ "name": "contents", "type": "string" }]
+    ///       },
+    ///       "primaryType": "Mail",
+    ///       "domain": { "name": "Example" },
+    ///       "message": { "contents": "Hello" }
+    ///     }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0xa3f207...ee01b"
@@ -1174,20 +1222,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// a notification with relevant data is sent. Only available on
     /// WebSocket connections.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - A subscription ID used for identifying and
     /// unsubscribing.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["newHeads"]
+    /// {
+    ///   "params": ["newHeads"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -1206,14 +1256,14 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns whether the node is syncing.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `false` since the local development node is never
     /// syncing.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// false
@@ -1230,20 +1280,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// the filter is no longer needed. Filters time out after a period of
     /// inactivity.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if the filter was successfully uninstalled,
     /// `false` if no filter with the given ID exists.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1257,20 +1309,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Cancels a subscription with the given ID.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if the subscription was successfully cancelled,
     /// `false` if no subscription with the given ID exists.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1284,13 +1338,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the current client version.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `String` - The current client version string.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "edr/0.6.0/revm/19.0.0"
@@ -1301,19 +1355,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns the Keccak-256 hash of the given data.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `DATA, 32 bytes` - The Keccak-256 hash of the input data.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x68656c6c6f"]
+    /// {
+    ///   "params": ["0x68656c6c6f"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8"
@@ -1328,19 +1384,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Jumps forward in time by the given amount of seconds. Returns the
     /// total time adjustment, in seconds.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `String` - The total time offset in seconds, as a decimal string.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [60]
+    /// {
+    ///   "params": [60]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "60"
@@ -1360,13 +1418,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Mines a single block, including as many transactions from the
     /// transaction pool as possible.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `String` - Always returns `"0"`.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0"
@@ -1390,20 +1448,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Reverts the state of the blockchain to a previous snapshot. Takes a
     /// single parameter, which is the snapshot ID to revert to.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if a snapshot was reverted, `false` if the
     /// snapshot ID is invalid.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1"]
+    /// {
+    ///   "params": ["0x1"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1418,19 +1478,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Enables or disables automatic mining of new blocks with each new
     /// transaction submitted to the provider.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [true]
+    /// {
+    ///   "params": [true]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1444,19 +1506,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Sets the block gas limit for future blocks.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x1c9c380"]
+    /// {
+    ///   "params": ["0x1c9c380"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1475,25 +1539,29 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Enables or configures automatic block mining at a fixed interval.
     /// Can also accept a range for randomized intervals.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params (fixed interval):**
+    /// **Request (fixed interval):**
     ///
     /// ```json
-    /// [5000]
+    /// {
+    ///   "params": [5000]
+    /// }
     /// ```
     ///
-    /// **Params (random interval range):**
+    /// **Request (random interval range):**
     ///
     /// ```json
-    /// [[3000, 6000]]
+    /// {
+    ///   "params": [[3000, 6000]]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1516,19 +1584,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Sets the timestamp of the next block. The timestamp must be greater
     /// than the current block's timestamp.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `String` - The new timestamp as a decimal string.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [1700000000]
+    /// {
+    ///   "params": [1700000000]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "1700000000"
@@ -1552,13 +1622,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// snapshot ID that can later be used with `evm_revert` to restore
     /// this state.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `QUANTITY` - The snapshot ID.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// "0x1"
@@ -1570,27 +1640,29 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Runs an `eth_call` within the context of a given block and returns
     /// detailed trace information about the execution.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object` - A trace result object containing `gasUsed`, `pass`,
     /// `output`, and `structLogs`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   {
-    ///     "to": "0x0000000000000000000000000000000000000001",
-    ///     "data": "0x70a08231"
-    ///   },
-    ///   "latest",
-    ///   { "disableMemory": true }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     {
+    ///       "to": "0x0000000000000000000000000000000000000001",
+    ///       "data": "0x70a08231"
+    ///     },
+    ///     "latest",
+    ///     { "disableMemory": true }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -1625,23 +1697,25 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns detailed trace information about a previously mined
     /// transaction.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object` - A trace result object containing `gasUsed`, `pass`,
     /// `output`, and `structLogs`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000000000000000000000000000001",
-    ///   { "disableStorage": true }
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000000000000000000000000000001",
+    ///     { "disableStorage": true }
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -1669,20 +1743,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Removes a transaction from the transaction pool. Fails if the
     /// transaction has already been mined.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if the transaction was removed, `false` if the
     /// transaction was not in the pool.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1696,13 +1772,13 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Returns whether automatic mining is enabled.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if automining is enabled, `false` otherwise.
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1715,19 +1791,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// the private key is not available. The impersonated account does not
     /// need to have any balance to send transactions.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1745,7 +1823,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Returns metadata about the provider instance, including client
     /// version, chain ID, instance ID, and latest block information.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Object` - Metadata object containing `clientVersion`, `chainId`,
     /// `instanceId`, `latestBlockNumber`, `latestBlockHash`, and optionally
@@ -1753,7 +1831,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Example
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// {
@@ -1771,19 +1849,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Mines one or more blocks with an optional fixed time interval
     /// between them.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0xa", "0x3c"]
+    /// {
+    ///   "params": ["0xa", "0x3c"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1812,22 +1892,24 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Modifies the balance of an account.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0xde0b6b3a7640000"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0xde0b6b3a7640000"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1845,22 +1927,24 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Modifies the bytecode stored at an account's address.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0x6080604052..."
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0x6080604052..."
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1878,19 +1962,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Sets the coinbase address to be used in new blocks.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1905,19 +1991,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Enables or disables logging of JSON-RPC requests and EVM execution.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [true]
+    /// {
+    ///   "params": [true]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1935,19 +2023,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Sets the minimum gas price accepted by the miner for transaction
     /// inclusion.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x3b9aca00"]
+    /// {
+    ///   "params": ["0x3b9aca00"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -1966,19 +2056,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Sets the base fee per gas for the next block.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x3b9aca00"]
+    /// {
+    ///   "params": ["0x3b9aca00"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -2001,22 +2093,24 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Modifies the nonce of an account. The new nonce must be greater than
     /// or equal to the existing nonce.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0xa"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0xa"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -2037,19 +2131,21 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Sets the `PREVRANDAO` value of the next block.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -2063,23 +2159,25 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// Writes a single position of the storage of an account.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// [
-    ///   "0x0000000000000000000000000000000000000001",
-    ///   "0x0",
-    ///   "0x0000000000000000000000000000000000000000000000000000000000000001"
-    /// ]
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     "0x0",
+    ///     "0x0000000000000000000000000000000000000000000000000000000000000001"
+    ///   ]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
@@ -2106,20 +2204,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Stops impersonating an account previously impersonated via
     /// `hardhat_impersonateAccount`.
     ///
-    /// ## Returns
+    /// ## Result
     ///
     /// `Boolean` - `true` if the account was being impersonated, `false`
     /// otherwise.
     ///
     /// ## Example
     ///
-    /// **Params:**
+    /// **Request:**
     ///
     /// ```json
-    /// ["0x0000000000000000000000000000000000000001"]
+    /// {
+    ///   "params": ["0x0000000000000000000000000000000000000001"]
+    /// }
     /// ```
     ///
-    /// **Result:**
+    /// **Response:**
     ///
     /// ```json
     /// true
