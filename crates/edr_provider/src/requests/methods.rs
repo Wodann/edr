@@ -252,8 +252,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_feeHistory`
     ///
-    /// Returns a collection of historical gas information for the requested
-    /// block range, including base fee per gas and effective priority fee.
+    /// Returns a collection of historical transaction fee information for the
+    /// requested block range, including base fee per gas and effective
+    /// priority fee.
     ///
     /// ## Result
     ///
@@ -284,9 +285,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ## Implementation details
     ///
     /// - Only available on London hardfork or later.
-    /// - Block count must be between 1 and 1024.
-    /// - Reward percentiles must be floats between 0 and 100 in non-decreasing
-    ///   order.
     #[serde(rename = "eth_feeHistory")]
     FeeHistory(
         /// `QUANTITY` - Number of blocks in the requested range. Must be
