@@ -340,9 +340,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The block parameter defaults to `"latest"` when omitted.
-    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
-    ///   the current hardfork.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getBalance")]
     GetBalance(
         /// `DATA, 20 bytes` - Address to check the balance of.
@@ -363,8 +362,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ## Result
     ///
     /// `Object|null` - A block object, or `null` when no block was found.
-    /// When `hydrated` is `true`, the block contains full transaction
-    /// objects; when `false`, only transaction hashes.
     ///
     /// ## Example
     ///
@@ -383,15 +380,15 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///   "number": "0x1",
     ///   "hash": "0x000...001",
     ///   "parentHash": "0x000...000",
-    ///   "transactions": ["0xabc..."]
+    ///   "transactions": ["0xabc..."],
+    ///   ...
     /// }
     /// ```
     ///
     /// ## Implementation details
     ///
-    /// - Does not accept EIP-1898 block specifications.
-    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
-    ///   the current hardfork.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getBlockByNumber")]
     GetBlockByNumber(
         /// `BlockSpec` - Block number or tag (`"latest"`, `"earliest"`,
@@ -408,8 +405,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ## Result
     ///
     /// `Object|null` - A block object, or `null` when no block was found.
-    /// When `hydrated` is `true`, the block contains full transaction
-    /// objects; when `false`, only transaction hashes.
     ///
     /// ## Example
     ///
@@ -430,7 +425,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// {
     ///   "number": "0x1",
     ///   "hash": "0x000...001",
-    ///   "transactions": [{ "hash": "0xabc...", "from": "0x..." }]
+    ///   "transactions": [{ "hash": "0xabc...", "from": "0x..." }, ...],
+    ///   ...
     /// }
     /// ```
     #[serde(rename = "eth_getBlockByHash")]
@@ -443,8 +439,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getBlockTransactionCountByHash`
     ///
-    /// Returns the number of transactions in a block identified by block
-    /// hash.
+    /// Returns the number of transactions in the block identified by the
+    /// provided block hash.
     ///
     /// ## Result
     ///
@@ -476,8 +472,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getBlockTransactionCountByNumber`
     ///
-    /// Returns the number of transactions in a block identified by block
-    /// number.
+    /// Returns the number of transactions in the block identified by the
+    /// provided block number.
     ///
     /// ## Result
     ///
@@ -502,7 +498,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Does not accept EIP-1898 block specifications.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(
         rename = "eth_getBlockTransactionCountByNumber",
         with = "edr_eth::serde::sequence"
@@ -518,8 +515,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Result
     ///
-    /// `DATA` - The bytecode at the given address, or `"0x"` for
-    /// externally-owned accounts.
+    /// `DATA` - The bytecode at the given address.
     ///
     /// ## Example
     ///
@@ -539,9 +535,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The block parameter defaults to `"latest"` when omitted.
-    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
-    ///   the current hardfork.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getCode")]
     GetCode(
         /// `DATA, 20 bytes` - Address to retrieve the code from.
@@ -557,9 +552,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getFilterChanges`
     ///
-    /// Polling method for a filter. Returns an array of logs, block hashes,
-    /// or transaction hashes that occurred since the last poll, depending on
-    /// the filter type.
+    /// Polling method for the filter with the provided ID. Returns an array of
+    /// logs, block hashes, or transaction hashes that occurred since the
+    /// last poll, depending on the filter type.
     ///
     /// ## Result
     ///
@@ -590,7 +585,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getFilterLogs`
     ///
-    /// Returns an array of all logs matching a filter with the given ID.
+    /// Returns an array of all logs matching the filter with the provided ID.
     /// Unlike `eth_getFilterChanges`, returns all matching logs, not just
     /// changes since the last poll.
     ///
@@ -620,7 +615,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getLogs`
     ///
-    /// Returns an array of all logs matching a given filter object.
+    /// Returns an array of all logs matching the filter with the provided ID.
     ///
     /// ## Result
     ///
@@ -702,9 +697,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The block parameter defaults to `"latest"` when omitted.
-    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
-    ///   the current hardfork.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getStorageAt")]
     GetStorageAt(
         /// `DATA, 20 bytes` - Address of the account.
@@ -797,7 +791,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Does not accept EIP-1898 block specifications.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getTransactionByBlockNumberAndIndex")]
     GetTransactionByBlockNumberAndIndex(
         /// `BlockSpec` - Block number or tag. Does not accept EIP-1898
@@ -843,11 +838,16 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getTransactionCount`
     ///
-    /// Returns the number of transactions (nonce) sent from an address.
+    /// Returns the nonce of the account corresponding to the given address.
+    ///
+    /// NOTE: This method is named `eth_getTransactionCount` for historical
+    /// reasons, as up until the pectra hardfork, the nonce was equivalent to
+    /// the number of transactions sent from the address. This changed due to
+    /// the inclusion of EIP-7702.
     ///
     /// ## Result
     ///
-    /// `QUANTITY` - The number of transactions sent from the address.
+    /// `QUANTITY` - The nonce of the account at the given address.
     ///
     /// ## Example
     ///
@@ -867,9 +867,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The block parameter defaults to `"latest"` when omitted.
-    /// - Post-merge block tags (`"safe"`, `"finalized"`) are validated against
-    ///   the current hardfork.
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getTransactionCount")]
     GetTransactionCount(
         /// `DATA, 20 bytes` - Address to check the transaction count for.
@@ -885,8 +884,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getTransactionReceipt`
     ///
-    /// Returns the receipt of a transaction by transaction hash. Only
-    /// available for mined transactions.
+    /// Returns the receipt of a transaction by transaction hash.
     ///
     /// ## Result
     ///
@@ -924,8 +922,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_maxPriorityFeePerGas`
     ///
-    /// Returns a suggested priority fee per gas (tip) for EIP-1559
-    /// transactions.
+    /// Returns the current maximum priority fee per gas in wei for
+    /// post-EIP-1559 transactions.
     ///
     /// ## Result
     ///
@@ -941,7 +939,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Always returns 1 gwei (1000000000 wei).
+    /// - Hardcoded to always returns 1 gwei (1,000,000,000 wei).
     #[serde(
         rename = "eth_maxPriorityFeePerGas",
         with = "edr_eth::serde::empty_params"
@@ -966,8 +964,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     NetVersion(()),
     /// # `eth_newBlockFilter`
     ///
-    /// Creates a filter in the node that notifies when a new block arrives.
-    /// To check if the state has changed, call `eth_getFilterChanges`.
+    /// Creates a filter that keeps track of new blocks. The filter can be
+    /// polled for newly arrived blocks using `eth_getFilterChanges`.
     ///
     /// ## Result
     ///
@@ -984,8 +982,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     NewBlockFilter(()),
     /// # `eth_newFilter`
     ///
-    /// Creates a filter object based on filter options, to notify when the
-    /// state changes (logs). To check if the state has changed, call
+    /// Creates a filter that keeps track of new logs. The filter can be polled
+    /// for newly arrived logs using `eth_getFilterLogs` or
     /// `eth_getFilterChanges`.
     ///
     /// ## Result
@@ -1021,8 +1019,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_newPendingTransactionFilter`
     ///
-    /// Creates a filter in the node that notifies when new pending
-    /// transactions arrive. To check if the state has changed, call
+    /// Creates a filter that keeps track of new pending transactions. The
+    /// filter can be polled for newly arrived pending transactions using
     /// `eth_getFilterChanges`.
     ///
     /// ## Result
@@ -1043,7 +1041,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     NewPendingTransactionFilter(()),
     /// # `eth_pendingTransactions`
     ///
-    /// Returns all pending transactions in the transaction pool.
+    /// Returns all pending transactions in the mempool.
     ///
     /// ## Result
     ///
@@ -1063,7 +1061,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     PendingTransactions(()),
     /// # `eth_sendRawTransaction`
     ///
-    /// Submits a pre-signed, RLP-encoded transaction for broadcast.
+    /// Submits a pre-signed, RLP-encoded transaction.
     ///
     /// ## Result
     ///
@@ -1085,6 +1083,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000001"
     /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - EIP-4844 transactions are only supported if auto-mining is enabled and
+    ///   the mempool is empty.
     #[serde(rename = "eth_sendRawTransaction", with = "edr_eth::serde::sequence")]
     SendRawTransaction(
         /// `DATA` - The signed, RLP-encoded transaction data.
@@ -1092,13 +1095,15 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_sendTransaction`
     ///
-    /// Creates a new message call transaction or a contract creation, signs
-    /// it using the account specified in `from`, and submits it.
+    /// Signs and submits a transaction request.
+    ///
+    /// The `from` address is used to identify the signing account, which must
+    /// either be impersonated by or its private key must be owned by the
+    /// provider.
     ///
     /// ## Result
     ///
-    /// `DATA, 32 bytes` - The transaction hash, or the zero hash if the
-    /// transaction is not yet available.
+    /// `DATA, 32 bytes` - The transaction hash.
     ///
     /// ## Example
     ///
@@ -1121,6 +1126,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// "0x0000000000000000000000000000000000000000000000000000000000000001"
     /// ```
+    ///
+    /// # Implementation details
+    ///
+    /// - EIP-4844 transactions are not supported. Please use
+    ///   `eth_sendRawTransaction` instead.
     #[serde(rename = "eth_sendTransaction", with = "edr_eth::serde::sequence")]
     SendTransaction(
         /// `Object` - The transaction request object.
@@ -1128,9 +1138,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `personal_sign`
     ///
-    /// Calculates an Ethereum-specific signature with:
-    /// `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) +
-    /// message)))`. The signing account must be managed by the provider.
+    /// Calculates an [EIP-191] signature for the provided data.
+    ///
+    /// [EIP-191]: https://eips.ethereum.org/EIPS/eip-191
     ///
     /// ## Result
     ///
@@ -1154,11 +1164,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// "0xa3f207...ee01b"
     /// ```
-    ///
-    /// ## Implementation details
-    ///
-    /// - Note the parameter order: message is first, address is second. This
-    ///   differs from `eth_sign` where address is first.
     #[serde(rename = "personal_sign")]
     PersonalSign(
         /// `DATA` - Message data to sign.
