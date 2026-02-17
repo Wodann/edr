@@ -316,7 +316,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     GasPrice(()),
     /// # `eth_getBalance`
     ///
-    /// Returns the balance of the account at the given address.
+    /// Returns the balance of the account at the provided address.
     ///
     /// ## Result
     ///
@@ -511,11 +511,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getCode`
     ///
-    /// Returns the bytecode stored at the given address.
+    /// Returns the bytecode stored at the provided address.
     ///
     /// ## Result
     ///
-    /// `DATA` - The bytecode at the given address.
+    /// `DATA` - The bytecode at the provided address.
     ///
     /// ## Example
     ///
@@ -672,7 +672,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Result
     ///
-    /// `DATA, 32 bytes` - The value at the given storage position,
+    /// `DATA, 32 bytes` - The value at the provided storage position,
     /// zero-padded to 32 bytes.
     ///
     /// ## Example
@@ -838,7 +838,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_getTransactionCount`
     ///
-    /// Returns the nonce of the account corresponding to the given address.
+    /// Returns the nonce of the account corresponding to the provided address.
     ///
     /// NOTE: This method is named `eth_getTransactionCount` for historical
     /// reasons, as up until the pectra hardfork, the nonce was equivalent to
@@ -847,7 +847,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Result
     ///
-    /// `QUANTITY` - The nonce of the account at the given address.
+    /// `QUANTITY` - The nonce of the account at the provided address.
     ///
     /// ## Example
     ///
@@ -967,6 +967,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Creates a filter that keeps track of new blocks. The filter can be
     /// polled for newly arrived blocks using `eth_getFilterChanges`.
     ///
+    /// Filters time out after a period of inactivity.
+    ///
     /// ## Result
     ///
     /// `QUANTITY` - A filter ID.
@@ -985,6 +987,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Creates a filter that keeps track of new logs. The filter can be polled
     /// for newly arrived logs using `eth_getFilterLogs` or
     /// `eth_getFilterChanges`.
+    ///
+    /// Filters time out after a period of inactivity.
     ///
     /// ## Result
     ///
@@ -1022,6 +1026,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// Creates a filter that keeps track of new pending transactions. The
     /// filter can be polled for newly arrived pending transactions using
     /// `eth_getFilterChanges`.
+    ///
+    /// Filters time out after a period of inactivity.
     ///
     /// ## Result
     ///
@@ -1174,8 +1180,10 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_signTypedData_v4`
     ///
-    /// Signs typed structured data according to EIP-712. The signing account
-    /// must be managed by the provider.
+    /// Signs typed structured data according to [EIP-712]. The private key of
+    /// the signing account must be owned by the provider.
+    ///
+    /// [EIP-712]: https://eips.ethereum.org/EIPS/eip-712
     ///
     /// ## Result
     ///
@@ -1276,14 +1284,12 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     Syncing(()),
     /// # `eth_uninstallFilter`
     ///
-    /// Uninstalls a filter with the given ID. Should always be called when
-    /// the filter is no longer needed. Filters time out after a period of
-    /// inactivity.
+    /// Uninstalls the filter corresponding to the provided ID.
     ///
     /// ## Result
     ///
     /// `Boolean` - `true` if the filter was successfully uninstalled,
-    /// `false` if no filter with the given ID exists.
+    /// `false` if no filter with the provided ID exists.
     ///
     /// ## Example
     ///
@@ -1307,12 +1313,12 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `eth_unsubscribe`
     ///
-    /// Cancels a subscription with the given ID.
+    /// Cancels the subscription corresponding to the provided ID.
     ///
     /// ## Result
     ///
     /// `Boolean` - `true` if the subscription was successfully cancelled,
-    /// `false` if no subscription with the given ID exists.
+    /// `false` if no subscription with the provided ID exists.
     ///
     /// ## Example
     ///
@@ -1353,7 +1359,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     Web3ClientVersion(()),
     /// # `web3_sha3`
     ///
-    /// Returns the Keccak-256 hash of the given data.
+    /// Returns the Keccak-256 hash of the provided data.
     ///
     /// ## Result
     ///
@@ -1381,8 +1387,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `evm_increaseTime`
     ///
-    /// Jumps forward in time by the given amount of seconds. Returns the
-    /// total time adjustment, in seconds.
+    /// Increases the offset between block timestamps by the provided amount of
+    /// seconds. Returns the resulting total offset, in seconds.
     ///
     /// ## Result
     ///
@@ -1407,7 +1413,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ## Implementation details
     ///
     /// - Returns a decimal string, not a hex-encoded quantity.
-    /// - The returned value is the total time offset, not the increment.
     #[serde(rename = "evm_increaseTime", with = "edr_eth::serde::sequence")]
     EvmIncreaseTime(
         /// `QUANTITY` - The number of seconds to increase the time by.
@@ -1536,14 +1541,22 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `evm_setIntervalMining`
     ///
-    /// Enables or configures automatic block mining at a fixed interval.
-    /// Can also accept a range for randomized intervals.
+    /// Enables, disables, or re-configures mining of blocks at a pre-configured
+    /// time interval.
     ///
     /// ## Result
     ///
     /// `Boolean` - Always returns `true`.
     ///
     /// ## Example
+    ///
+    /// **Request (disable interval mining):**
+    ///
+    /// ```json
+    /// {
+    ///  "params": [0]
+    /// }
+    /// ```
     ///
     /// **Request (fixed interval):**
     ///
@@ -1566,12 +1579,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
-    ///
-    /// ## Implementation details
-    ///
-    /// - Pass `0` to disable interval mining.
-    /// - The interval is specified in milliseconds.
-    /// - A two-element array `[min, max]` sets a random interval range.
     #[serde(rename = "evm_setIntervalMining", with = "edr_eth::serde::sequence")]
     EvmSetIntervalMining(
         /// `QUANTITY|Array` - The interval in milliseconds, or a
@@ -1642,8 +1649,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Result
     ///
-    /// `Object` - A trace result object containing `gasUsed`, `pass`,
-    /// `output`, and `structLogs`.
+    /// `Object` - A trace result object depending on the used tracer.
     ///
     /// ## Example
     ///
