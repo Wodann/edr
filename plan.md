@@ -2,145 +2,253 @@
 
 ## Background
 
-PR #1278 unified the tracing architecture by replacing the old `TraceCollector`-based `Trace<HaltReasonT>` (a flat list of `Before`/`Step`/`After` messages) with `CallTraceArena` from `revm-inspectors` (a tree of `CallTraceNode`s). The N-API `traces` getter on `Response` was commented out because it returned `Vec<RawTrace>` backed by the old `Trace` type, which is no longer populated.
+PR #1278 unified the tracing architecture by replacing the old
+`TraceCollector`-based `Trace<HaltReasonT>` with `CallTraceArena` from
+`revm-inspectors`. The N-API `traces` accessor on `Response` was removed
+because it returned `Vec<RawTrace>` backed by the old `Trace` type, which is
+no longer populated.
 
-Hardhat 2 depends on the `traces` getter returning `Vec<RawTrace>`, so we need a backwards-compatibility conversion layer.
+Hardhat 2 depends on the `traces` accessor returning `Vec<RawTrace>`. Since
+nothing else uses `TraceCollector`, `BeforeMessage`, `AfterMessage`, `Step`,
+or the N-API types (`TracingMessage`, `TracingStep`, `TracingMessageResult`),
+we can simplify the N-API bindings to match exactly what Hardhat needs, and
+convert directly from `CallTraceArena` to N-API types with no intermediate
+Rust representation.
 
-## What Needs to Happen
+## Hardhat's Minimal Types (the contract)
 
-Convert each `CallTraceArena` into the old `edr_tracing::Trace<EvmHaltReason>` format, wrap it in `RawTrace`, and re-expose it via the `traces` getter on `Response`.
+```typescript
+export interface MinimalMessage {
+  to?: Address;
+  codeAddress?: Address;
+  value: bigint;
+  data: Uint8Array;
+  caller: Address;
+  gasLimit: bigint;
+  isStaticCall: boolean;
+}
 
-## Old Format Recap
+export interface MinimalInterpreterStep {
+  pc: number;
+  depth: number;
+  opcode: { name: string };
+  stack: bigint[];
+  memory?: Uint8Array;
+}
 
-The old `Trace` is a flat sequence of messages:
+export interface MinimalExecResult {
+  success: boolean;
+  executionGasUsed: bigint;
+  contractAddress?: Address;
+  reason?: SuccessReason | ExceptionalHalt;
+  output?: Buffer;
+}
+
+export interface MinimalEVMResult {
+  execResult: MinimalExecResult;
+}
 ```
-Before(BeforeMessage)  -- depth 0 (root call)
-  Step(Step)           -- each EVM instruction
-  Step(Step)
-  Before(BeforeMessage) -- depth 1 (subcall)
-    Step(Step)
-    Step(Step)
-  After(AfterMessage)   -- subcall result
-  Step(Step)
-After(AfterMessage)    -- root call result
-```
 
-The `CallTraceArena` is a tree:
-- Node 0 (root): `trace.steps[]`, `children[]`, `ordering[]`
-- Each child node has its own `trace.steps[]`, `children[]`, etc.
+## Approach: Direct conversion, no intermediate Rust types
 
-## Conversion Strategy
+Convert directly from `CallTraceArena` to N-API types (`TracingMessage`,
+`TracingStep`, `TracingMessageResult`). This eliminates the `edr_tracing`
+intermediate representation entirely.
 
-Perform a depth-first traversal of the arena tree, emitting `Before`/`Step`/`After` messages in the same interleaved order that `TraceCollector` used to produce. The `TraceMemberOrder` enum in each node tells us exactly when subcalls happen relative to steps:
+`RawTrace` stores the arena and a verbose flag, then the `.trace()` getter
+does the DFS traversal producing
+`Vec<Either3<TracingMessage, TracingStep, TracingMessageResult>>` on demand.
 
-1. For each node, emit a `BeforeMessage`
-2. Walk `ordering` entries:
-   - `TraceMemberOrder::Step(i)` → emit a `Step` from `node.trace.steps[i]`
-   - `TraceMemberOrder::Call(i)` → recurse into `node.children[i]`
-   - `TraceMemberOrder::Log(_)` → skip (not part of old format)
-3. After processing all ordering entries, emit an `AfterMessage`
+### N-API types (`crates/edr_napi/src/trace.rs`)
 
-### Field Mapping: `CallTraceNode` → `BeforeMessage`
+Simplified to match Hardhat's minimal types:
 
-| BeforeMessage field | Source |
-|---|---|
-| `depth` | `trace.depth` |
-| `caller` | `trace.caller` |
-| `to` | `Some(trace.address)` for calls, `None` for creates |
-| `is_static_call` | `trace.kind == CallKind::StaticCall` |
-| `gas_limit` | `trace.gas_limit` |
-| `data` | `trace.data.clone()` |
-| `value` | `trace.value` |
-| `code_address` | `Some(trace.address)` for calls, `None` for creates |
-| `code` | `None` (code is not stored in `CallTraceArena`; the old format included it but it's not critical for Hardhat 2's usage — if needed, this can be revisited) |
-
-### Field Mapping: `CallTraceStep` → `Step`
-
-| Step field | Source |
-|---|---|
-| `pc` | `step.pc as u32` |
-| `depth` | parent `trace.depth` as `u64` |
-| `opcode` | `step.op.get()` |
-| `stack` | `step.stack` → `Stack::Full(vec)` if `Some`, `Stack::Top(None)` if `None` |
-| `memory` | `step.memory` → `Some(bytes.to_vec())` if `Some`, `None` if `None` |
-
-### Field Mapping: `CallTraceNode` → `AfterMessage`
-
-| AfterMessage field | Source |
-|---|---|
-| `execution_result` | Synthesized from `trace.status`, `trace.gas_used`, `trace.output`, `trace.kind` |
-| `contract_address` | For creates: `Some(trace.address)` if `trace.success`, else `None`. For calls: `None` |
-
-For `execution_result`, map `trace.status` (an `Option<InstructionResult>`) using `SuccessOrHalt`:
-- `Success` → `ExecutionResult::Success { reason, gas_used: trace.gas_used, gas_refunded: 0, logs: vec![], output }`
-  - `output`: `Output::Create(trace.output, Some(trace.address))` for creates, `Output::Call(trace.output)` for calls
-- `Revert` → `ExecutionResult::Revert { gas_used: trace.gas_used, output: trace.output }`
-- `Halt(reason)` → `ExecutionResult::Halt { reason, gas_used: trace.gas_limit }`
-
-Note: `gas_refunded` and `logs` are not available in `CallTraceArena` — use `0` and `vec![]` respectively. This is acceptable because Hardhat 2 only uses traces for stack trace decoding, not for gas accounting.
-
-## Implementation Steps
-
-### Step 1: Add conversion function in `edr_tracing`
-
-Add a new module or function in `crates/tracing/src/lib.rs` (or a new file `crates/tracing/src/convert.rs`):
-
+**`TracingMessage`** — matches `MinimalMessage`:
 ```rust
-pub fn from_call_trace_arena(arena: &CallTraceArena) -> Trace<EvmHaltReason>
+#[napi(object)]
+pub struct TracingMessage {
+    pub caller: Uint8Array,
+    pub to: Option<Uint8Array>,
+    pub code_address: Option<Uint8Array>,
+    pub value: BigInt,
+    pub data: Uint8Array,
+    pub gas_limit: BigInt,
+    pub is_static_call: bool,
+}
 ```
 
-This function performs the DFS traversal described above.
-
-**Dependencies**: `edr_tracing` will need to depend on `revm-inspectors` (for `CallTraceArena`, `CallTraceNode`, `CallTraceStep`, `TraceMemberOrder`, `CallKind`) and `revm-interpreter` (for `InstructionResult`, `SuccessOrHalt`).
-
-### Step 2: Update `RawTrace` to support construction from `CallTraceArena`
-
-In `crates/edr_napi/src/trace.rs`, add:
-
+**`TracingStep`** — matches `MinimalInterpreterStep`:
 ```rust
+#[napi(object)]
+pub struct TracingStep {
+    pub pc: u32,
+    pub depth: u32,
+    pub opcode: TracingOpcode,
+    pub stack: Vec<BigInt>,
+    pub memory: Option<Uint8Array>,
+}
+
+#[napi(object)]
+pub struct TracingOpcode {
+    pub name: String,
+}
+```
+
+**`TracingMessageResult`** — matches `MinimalEVMResult`:
+```rust
+#[napi(object)]
+pub struct TracingMessageResult {
+    pub exec_result: TracingExecResult,
+}
+
+#[napi(object)]
+pub struct TracingExecResult {
+    pub success: bool,
+    pub execution_gas_used: BigInt,
+    pub contract_address: Option<Uint8Array>,
+    pub reason: Option<Either<SuccessReason, ExceptionalHalt>>,
+    pub output: Option<Uint8Array>,
+}
+```
+
+**`RawTrace`** — holds arena + verbose flag:
+```rust
+#[napi]
+#[derive(Clone)]
+pub struct RawTrace {
+    arena: CallTraceArena,
+    verbose: bool,
+}
+
+#[napi]
 impl RawTrace {
-    pub fn from_arena(arena: &CallTraceArena) -> Self {
-        let trace = edr_tracing::Trace::from_call_trace_arena(arena);
-        Self { inner: Arc::new(trace) }
+    #[napi(getter)]
+    pub fn trace(&self) -> Vec<Either3<TracingMessage, TracingStep, TracingMessageResult>> {
+        // DFS traversal of self.arena, directly producing N-API types
     }
 }
 ```
 
-### Step 3: Uncomment and update `traces` getter in `Response`
+## Conversion Strategy
 
-In `crates/edr_napi/src/provider/response.rs`, uncomment the `traces` method:
+DFS traversal of the `CallTraceArena`, emitting N-API types directly as a
+flat sequence that mirrors the old `Before`/`Step`/`After` message ordering.
 
+For each arena node:
+1. Emit a `TracingMessage` (from `CallTraceNode`)
+2. Walk `ordering` entries:
+   - `Step(i)` → emit `TracingStep` from `node.trace.steps[i]`
+   - `Call(i)` → recurse into `node.children[i]`
+   - `Log(_)` → skip
+3. Emit a `TracingMessageResult` (from `CallTraceNode`)
+
+### `CallTraceNode` → `TracingMessage`
+
+| TracingMessage field | Source |
+|---|---|
+| `caller` | `Uint8Array::from(trace.caller)` |
+| `to` | `Some(trace.address)` for calls, `None` for creates |
+| `code_address` | `Some(trace.address)` for calls, `None` for creates |
+| `value` | `trace.value` as `BigInt` |
+| `data` | `Uint8Array::from(trace.data)` |
+| `gas_limit` | `trace.gas_limit` as `BigInt` |
+| `is_static_call` | `trace.kind == CallKind::StaticCall` |
+
+### `CallTraceStep` → `TracingStep`
+
+| TracingStep field | Source |
+|---|---|
+| `pc` | `step.pc as u32` |
+| `depth` | `trace.depth as u32` (from parent node) |
+| `opcode` | `TracingOpcode { name: OpCode::name_by_op(step.op.get()) }` |
+| `stack` | If verbose: all elements as `Vec<BigInt>`. If non-verbose: `vec![last]` or `vec![]`. |
+| `memory` | `step.memory.as_ref().map(\|m\| Uint8Array::from(m.as_bytes()))` |
+
+### `CallTraceNode` → `TracingMessageResult`
+
+| TracingExecResult field | Source |
+|---|---|
+| `success` | `trace.success` |
+| `execution_gas_used` | `trace.gas_used` as `BigInt` |
+| `contract_address` | For creates: `Some(trace.address)` if success, else `None`. For calls: `None` |
+| `reason` | `SuccessOrHalt` from `trace.status`: `Success(r)` → `Some(A(r))`, `Halt(r)` → `Some(B(r))`, `Revert` → `None` |
+| `output` | `Some(Uint8Array::from(trace.output))` |
+
+## Implementation Steps
+
+### Step 1: Change non-verbose `TracingInspectorConfig` to record stack snapshots
+
+Hardhat's `MinimalInterpreterStep.stack` is `bigint[]` (always present). The
+old `TraceCollector` always captured at least the top of the stack. The current
+non-verbose config uses `StackSnapshotType::None`, so `step.stack == None`.
+
+In `crates/edr_provider/src/observability.rs`, change:
 ```rust
-#[napi(catch_unwind, getter)]
+// Before:
+TracingInspectorConfig::default_parity().set_steps(true)
+// After:
+TracingInspectorConfig::default_parity()
+    .set_steps(true)
+    .set_stack_snapshots(StackSnapshotType::Full)
+```
+
+### Step 2: Rewrite N-API trace types and `RawTrace`
+
+In `crates/edr_napi/src/trace.rs`:
+- Simplify `TracingMessage`, `TracingStep`, `TracingMessageResult` as above
+- Add `TracingOpcode`, `TracingExecResult`
+- Change `RawTrace` to hold `CallTraceArena` + `verbose: bool`
+- Implement `.trace()` getter as DFS traversal producing N-API types directly
+
+In `crates/edr_napi/src/result.rs`:
+- Remove `ExecutionResult`, `SuccessResult`, `RevertResult`, `HaltResult`,
+  `CallOutput`, `CreateOutput` (only used by old `TracingMessageResult`)
+- Keep `SuccessReason`, `ExceptionalHalt`
+
+### Step 3: Re-add `traces()` as a function on `Response`
+
+In `crates/edr_napi/src/provider/response.rs`:
+```rust
+#[napi(catch_unwind)]
 pub fn traces(&self) -> Vec<RawTrace> {
     self.inner
         .call_trace_arenas
         .iter()
-        .map(|arena| RawTrace::from_arena(arena))
+        .map(|arena| RawTrace::new(arena.clone(), self.inner.verbose))
         .collect()
 }
 ```
+Use `#[napi(catch_unwind)]` (function) NOT `#[napi(catch_unwind, getter)]` to
+avoid repeated expensive conversions.
 
-### Step 4: Uncomment and re-enable tests
+Propagate `verbose_raw_tracing` into `edr_napi_core::spec::Response` as a
+`verbose: bool` field.
+
+### Step 4: Remove dead code
+
+- `edr_tracing` crate: remove `Trace`, `TraceMessage`, `BeforeMessage`,
+  `AfterMessage`, `Step`, `Stack`, `TraceCollector`, and the `Inspector` impl.
+  If nothing remains, consider removing the crate entirely.
+- `crates/edr_provider/src/debugger.rs` — dead `Debugger` struct
+- `crates/edr_solidity/src/nested_tracer.rs` — dead `NestedTracer`
+
+### Step 5: Uncomment and update tests
 
 In `crates/edr_napi/test/provider.ts`:
 - Uncomment the "verbose mode" `describe` block (lines ~136-487)
 - Uncomment the `assertEqualMemory` helper (lines ~754-764)
-- Adjust tests if the converted format differs slightly (e.g. `code` field may be `None`)
+- Update tests for changed N-API shapes:
+  - `step.opcode` is now `{ name: "PUSH1" }` instead of `"PUSH1"`
+  - `step.pc` is `number` instead of `bigint`
+  - `step.depth` is `number` instead of `u8`
+  - `response.traces` is now `response.traces()` (function, not getter)
 
-### Step 5: Verify and update `index.d.ts`
+### Step 6: Regenerate `index.d.ts`
 
-The TypeScript declaration file (`crates/edr_napi/index.d.ts`) is auto-generated by `napi-rs`. After adding the `traces` getter back, regenerate the type declarations so that `Response` once again exposes:
-```typescript
-get traces(): Array<RawTrace>
-```
+Ensure `Response` exposes `traces(): Array<RawTrace>` and the type
+declarations for the simplified types are correct.
 
-## Considerations
+## Performance Note
 
-1. **`code` field**: The old `BeforeMessage` included the contract bytecode. `CallTraceArena` doesn't store this. For Hardhat 2 compatibility, we should check whether it actually reads the `code` field from `TracingMessage`. If it does, we may need to pass the `address_to_executed_code` map into the conversion. If not, `None` is fine.
-
-2. **`gas_refunded` and `logs`**: These are not available per-node in the arena. Using `0` and `vec![]` should be acceptable since Hardhat 2 uses traces for stack trace analysis, not gas accounting.
-
-3. **Stack representation**: When `verbose_raw_tracing` is false, `TracingInspectorConfig::default_parity().set_steps(true)` records steps but with `StackSnapshotType::None`, meaning `step.stack` will be `None`. The old format would have `Stack::Top(last_element)` in non-verbose mode. We should map `None` → `Stack::Top(None)` and `Some(stack)` → `Stack::Full(vec)` (or `Stack::Top(last)` depending on the snapshot type config).
-
-4. **Performance**: This conversion is lazy (done in the getter), so it only runs when Hardhat 2 actually accesses `.traces`. The new `callTraces()` method remains unaffected.
+The conversion runs only when `.traces()` is called (a function, not a getter,
+to discourage repeated calls). The new `callTraces()` method is unaffected.
