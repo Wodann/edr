@@ -658,11 +658,64 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// exclusive with `fromBlock`/`toBlock`.
         LogFilterOptions,
     ),
-    /// `eth_getProof`
+    /// # `eth_getProof`
+    ///
+    /// Returns the Merkle proof for the account corresponding to the provided
+    /// address and (optionally) some storage keys.
+    ///
+    /// ## Result
+    ///
+    /// `Object` - An account object containing the account's balance, nonce,
+    /// code hash, storage hash, account proof, and storage proofs for the
+    /// requested storage keys.
+    ///
+    /// ## Example
+    ///
+    /// **Request:**
+    ///
+    /// ```json
+    /// {
+    ///   "params": [
+    ///     "0x0000000000000000000000000000000000000001",
+    ///     ["0x0000000000000000000000000000000000000000000000000000000000000000"],
+    ///     "latest"
+    ///   ]
+    /// }
+    /// ```
+    ///
+    /// **Response:**
+    ///
+    /// ```json
+    /// {
+    ///   "address": "0x0000000000000000000000000000000000000001",
+    ///   "balance": "0x0",
+    ///   "codeHash": "0x...",
+    ///   "nonce": "0x0",
+    ///   "storageHash": "0x...",
+    ///   "accountProof": ["0x..."],
+    ///   "storageProof": [
+    ///     {
+    ///       "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    ///       "value": "0x0",
+    ///       "proof": ["0x..."]
+    ///     }
+    ///   ]
+    /// }
+    /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Post-merge block tags (`"safe"`, `"finalized"`) are only available for
+    ///   the merge hardfork and later.
     #[serde(rename = "eth_getProof")]
     GetProof(
-        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")] Address,
+        /// `DATA, 20 bytes` - Address of the account.
+        #[serde(deserialize_with = "crate::requests::serde::deserialize_address")]
+        Address,
+        /// `Array<DATA, 32 bytes>` - Array of storage keys to generate proofs
+        /// for.
         Vec<StorageKey>,
+        /// `BlockSpec` - Block number, tag, or EIP-1898 block identifier.
         BlockSpec,
     ),
 
@@ -1682,7 +1735,10 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ## Implementation details
     ///
     /// - The block parameter defaults to `"latest"` when omitted.
-    /// - Only the default tracer is supported.
+    /// - The `4byteTracer`, `callTracer`, `noopTracer`, and `prestateTracer`
+    ///   from [geth-tracers] are supported.
+    ///
+    /// [geth-tracers]: https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers
     // TODO: Add support for `GethDebugTracingCallOptions`
     // <https://geth.ethereum.org/docs/interacting-with-geth/rpc/ns-debug#debugtracecall>
     #[serde(rename = "debug_traceCall")]
@@ -1693,8 +1749,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
         /// Defaults to `"latest"`.
         #[serde(default)]
         Option<BlockSpec>,
-        /// `Object` - Trace configuration with optional `disableStorage`,
-        /// `disableMemory`, `disableStack` fields.
+        /// `Object` - Geth debug tracing options. Supports various
+        /// configuration options including `disableStorage`, `disableMemory`,
+        /// `disableStack`, `disableReturnData`, and `enableReturnData`.
         #[serde(default)]
         Option<GethDebugTracingOptions>,
     ),
@@ -1734,19 +1791,23 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Only the default tracer is supported.
+    /// - The `4byteTracer`, `callTracer`, `noopTracer`, and `prestateTracer`
+    ///   from [geth-tracers] are supported.
+    ///
+    /// [geth-tracers]: https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers
     #[serde(rename = "debug_traceTransaction")]
     DebugTraceTransaction(
         /// `DATA, 32 bytes` - The hash of the transaction to trace.
         B256,
-        /// `Object` - Trace configuration with optional `disableStorage`,
-        /// `disableMemory`, `disableStack` fields.
+        /// `Object` - Geth debug tracing options. Supports various
+        /// configuration options including `disableStorage`, `disableMemory`,
+        /// `disableStack`, `disableReturnData`, and `enableReturnData`.
         #[serde(default)]
         Option<GethDebugTracingOptions>,
     ),
     /// # `hardhat_dropTransaction`
     ///
-    /// Removes a transaction from the transaction pool. Fails if the
+    /// Removes a transaction from the mempool. Triggers an error if the
     /// transaction has already been mined.
     ///
     /// ## Result
@@ -1793,9 +1854,9 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     GetAutomine(()),
     /// # `hardhat_impersonateAccount`
     ///
-    /// Allows sending transactions on behalf of the given address, even if
-    /// the private key is not available. The impersonated account does not
-    /// need to have any balance to send transactions.
+    /// Enables sending of transactions on behalf of the provided address, even
+    /// if the private key is not available. The impersonated account does
+    /// not need to have any balance to send transactions.
     ///
     /// ## Result
     ///
@@ -1874,12 +1935,6 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
-    ///
-    /// ## Implementation details
-    ///
-    /// - Block count defaults to `1` when omitted.
-    /// - Interval defaults to `1` second when omitted.
-    /// - Both parameters are hex-encoded.
     #[serde(rename = "hardhat_mine")]
     Mine(
         /// `QUANTITY` - Number of blocks to mine. Defaults to `1`.
@@ -1920,6 +1975,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - This changes the state without mining a block, but instead is tracked
+    ///   outside of the blockchain.
     #[serde(rename = "hardhat_setBalance")]
     SetBalance(
         /// `DATA, 20 bytes` - The address whose balance to set.
@@ -1955,6 +2015,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - This changes the state without mining a block, but instead is tracked
+    ///   outside of the blockchain.
     #[serde(rename = "hardhat_setCode")]
     SetCode(
         /// `DATA, 20 bytes` - The address where the code should be stored.
@@ -2051,7 +2116,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Only works on pre-EIP-1559 hardforks. Calling this on an EIP-1559+
+    /// - Only works for pre-London hardforks. Calling this after the London
     ///   hardfork will return an error.
     #[serde(rename = "hardhat_setMinGasPrice", with = "edr_eth::serde::sequence")]
     SetMinGasPrice(
@@ -2060,7 +2125,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `hardhat_setNextBlockBaseFeePerGas`
     ///
-    /// Sets the base fee per gas for the next block.
+    /// Sets the base fee per gas that will be used when mining the next block.
     ///
     /// ## Result
     ///
@@ -2084,7 +2149,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - Only works on EIP-1559+ hardforks. Calling this on a pre-EIP-1559
+    /// - Only works for post-London hardforks. Calling this on a pre-London
     ///   hardfork will return an error.
     #[serde(
         rename = "hardhat_setNextBlockBaseFeePerGas",
@@ -2121,6 +2186,14 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - This changes the state without mining a block, but instead is tracked
+    ///   outside of the blockchain.
+    /// - The mempool will be updated to reflect the new nonce, so that
+    ///   transactions with a nonce lower than the new nonce will be dropped
+    ///   from the pool.
     #[serde(rename = "hardhat_setNonce")]
     SetNonce(
         /// `DATA, 20 bytes` - The address whose nonce to set.
@@ -2156,6 +2229,11 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     /// ```json
     /// true
     /// ```
+    ///
+    /// ## Implementation details
+    ///
+    /// - Only works for post-merge hardforks. Calling this on a pre-merge
+    ///   hardfork will return an error.
     #[serde(rename = "hardhat_setPrevRandao", with = "edr_eth::serde::sequence")]
     SetPrevRandao(
         /// `DATA, 32 bytes` - The `PREVRANDAO` value for the next block.
@@ -2163,7 +2241,7 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ),
     /// # `hardhat_setStorageAt`
     ///
-    /// Writes a single position of the storage of an account.
+    /// Modifies a single storage slot of an account.
     ///
     /// ## Result
     ///
@@ -2191,7 +2269,8 @@ pub enum MethodInvocation<ChainSpecT: RpcChainSpec> {
     ///
     /// ## Implementation details
     ///
-    /// - The value must be exactly 32 bytes (zero-padded).
+    /// - This changes the state without mining a block, but instead is tracked
+    ///   outside of the blockchain.
     #[serde(rename = "hardhat_setStorageAt")]
     SetStorageAt(
         /// `DATA, 20 bytes` - The address of the account.
