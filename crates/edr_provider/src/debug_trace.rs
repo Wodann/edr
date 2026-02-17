@@ -51,6 +51,7 @@ pub fn debug_trace_transaction<'header, ChainSpecT: BlockChainSpec<SignedTransac
             let mut debug_inspector = DebugInspector::new(tracing_options)
                 .map_err(DebugTraceError::from_debug_inspector_creation_error)?;
 
+            let include_call_traces = observer_config.include_call_traces;
             let mut evm_observer = EvmObserver::new(observer_config);
 
             let transaction_hash = *transaction.transaction_hash();
@@ -75,7 +76,12 @@ pub fn debug_trace_transaction<'header, ChainSpecT: BlockChainSpec<SignedTransac
                 state: state.as_ref(),
             });
 
-            let call_trace_arenas = vec![call_trace_arena];
+            let call_trace_arenas =
+                if include_call_traces.should_include(|| !result.result.is_success()) {
+                    vec![call_trace_arena]
+                } else {
+                    Vec::new()
+                };
 
             let geth_trace = debug_inspector
                 .get_result(

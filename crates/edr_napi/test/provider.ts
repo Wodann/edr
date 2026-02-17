@@ -8,6 +8,7 @@ import {
   ContractDecoder,
   GENERIC_CHAIN_TYPE,
   genericChainProviderFactory,
+  IncludeTraces,
   l1GenesisState,
   l1HardforkFromString,
   l1HardforkLatest,
@@ -134,15 +135,20 @@ describe("Provider", () => {
   });
 
   describe("verbose mode", function () {
+    const tracingProviderConfig = {
+      ...providerConfig,
+      genesisState: providerConfig.genesisState.concat(
+        l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
+      ),
+      observability: {
+        includeCallTraces: IncludeTraces.All,
+      },
+    };
+
     it("should only include the top of the stack by default", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -185,12 +191,7 @@ describe("Provider", () => {
     it("should only include the whole stack if verbose mode is enabled", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -238,12 +239,7 @@ describe("Provider", () => {
     it("should not include memory by default", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -285,12 +281,7 @@ describe("Provider", () => {
     it("should include memory if verbose mode is enabled", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -339,12 +330,7 @@ describe("Provider", () => {
     it("should include isStaticCall flag in tracing messages", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -386,12 +372,7 @@ describe("Provider", () => {
     it("should have tracing information when debug_traceTransaction is used", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},
@@ -446,12 +427,7 @@ describe("Provider", () => {
     it("should have tracing information when debug_traceCall is used", async function () {
       const provider = await context.createProvider(
         GENERIC_CHAIN_TYPE,
-        {
-          ...providerConfig,
-          genesisState: providerConfig.genesisState.concat(
-            l1GenesisState(l1HardforkFromString(providerConfig.hardfork))
-          ),
-        },
+        tracingProviderConfig,
         loggerConfig,
         {
           subscriptionCallback: (_event: SubscriptionEvent) => {},

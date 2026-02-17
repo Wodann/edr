@@ -140,9 +140,15 @@ pub struct CallResultWithMetadata<HaltReasonT: HaltReasonTrait> {
 
 impl<HaltReasonT: HaltReasonTrait> CallResultWithMetadata<HaltReasonT> {
     /// Converts into a [`CallResult`], discarding metadata.
-    pub fn into_call_result(self) -> CallResult<HaltReasonT> {
+    pub fn into_call_result(self, include_traces: IncludeTraces) -> CallResult<HaltReasonT> {
         CallResult {
-            call_trace_arena: Some(self.call_trace_arena),
+            call_trace_arena: if include_traces
+                .should_include(|| !self.execution_result.is_success())
+            {
+                Some(self.call_trace_arena)
+            } else {
+                None
+            },
             execution_result: self.execution_result,
         }
     }
@@ -171,7 +177,10 @@ pub struct SendTransactionResult<BlockT, HaltReasonT: HaltReasonTrait, SignedTra
 impl<BlockT, HaltReasonT: HaltReasonTrait, SignedTransactionT>
     SendTransactionResult<BlockT, HaltReasonT, SignedTransactionT>
 {
-    pub fn into_hash_and_call_traces(self) -> (B256, Vec<CallTraceArena>) {
+    pub fn into_hash_and_call_traces(
+        self,
+        include_call_traces: IncludeTraces,
+    ) -> (B256, Vec<CallTraceArena>) {
         let Self {
             transaction_hash,
             mining_results,
@@ -183,7 +192,14 @@ impl<BlockT, HaltReasonT: HaltReasonTrait, SignedTransactionT>
                 result
                     .transaction_inspector_data
                     .into_iter()
-                    .map(|observed_data| observed_data.call_trace_arena)
+                    .zip(result.transaction_results)
+                    .filter_map(|(observed_data, transaction_result)| {
+                        if include_call_traces.should_include(|| !transaction_result.is_success()) {
+                            Some(observed_data.call_trace_arena)
+                        } else {
+                            None
+                        }
+                    })
             })
             .collect();
 
@@ -1817,6 +1833,7 @@ where
 
         let custom_precompiles = self.precompile_overrides.clone();
 
+        let include_call_traces = self.observability.include_call_traces;
         let scheduled_blob_params = self.scheduled_blob_params().cloned();
         self.execute_in_block_context(Some(block_spec), move |blockchain, block, state| {
             let block_env = BlockEnvWithZeroBaseFee::new(ChainSpecT::BlockEnv::new_block_env(
@@ -1846,7 +1863,12 @@ where
                 state: state.as_ref(),
             });
 
-            let call_trace_arenas = vec![call_trace_arena];
+            let call_trace_arenas =
+                if include_call_traces.should_include(|| !result.result.is_success()) {
+                    vec![call_trace_arena]
+                } else {
+                    Vec::new()
+                };
 
             let geth_trace = debug_inspector
                 .get_result(
@@ -2270,12 +2292,20 @@ where
             return Err(ProviderError::TransactionFailed(Box::new(
                 TransactionFailureWithCallTraces {
                     failure,
-                    call_trace_arenas: vec![call_result.call_trace_arena],
+                    call_trace_arenas: if self
+                        .observability
+                        .include_call_traces
+                        .should_include(|| !call_result.execution_result.is_success())
+                    {
+                        vec![call_result.call_trace_arena]
+                    } else {
+                        Vec::new()
+                    },
                 },
             )));
         }
 
-        Ok(call_result.into_call_result())
+        Ok(call_result.into_call_result(self.observability.include_call_traces))
     }
 
     fn run_call_impl(
@@ -2719,6 +2749,7 @@ where
         let contract_decoder = Arc::clone(&self.contract_decoder);
         let scheduled_blob_params = self.scheduled_blob_params().cloned();
 
+        let include_call_traces = self.observability.include_call_traces;
 
         self.execute_in_block_context(Some(block_spec), |blockchain, block, state| {
             let header = block.block_header();
@@ -2774,7 +2805,11 @@ where
                 })
             })?;
 
-            let mut call_trace_arenas = vec![call_trace_arena];
+            let mut call_trace_arenas = if include_call_traces == IncludeTraces::All {
+                vec![call_trace_arena]
+            } else {
+                Vec::new()
+            };
 
             // Ensure that the initial estimation is at least the minimum cost + 1.
             if initial_estimation <= minimum_cost {
@@ -2806,7 +2841,9 @@ where
                 encoded_console_logs: _,
             } = evm_observer.collect_and_report(&precompile_addresses)?;
 
-            call_trace_arenas.push(call_trace_arena);
+            if include_call_traces.should_include(|| !success) {
+                call_trace_arenas.push(call_trace_arena);
+            }
 
             // Return the initial estimation if it was successful
             if success {
