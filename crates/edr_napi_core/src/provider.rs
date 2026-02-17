@@ -23,6 +23,9 @@ pub trait SyncProvider: Send + Sync {
 
     /// Set the verbose tracing flag to the provided value.
     fn set_verbose_tracing(&self, enabled: bool);
+
+    /// Returns whether verbose tracing is currently enabled.
+    fn verbose_tracing(&self) -> bool;
 }
 
 impl<ChainSpecT: SyncNapiSpec<TimerT>, TimerT: Clone + TimeSinceEpoch> SyncProvider
@@ -71,9 +74,10 @@ impl<ChainSpecT: SyncNapiSpec<TimerT>, TimerT: Clone + TimeSinceEpoch> SyncProvi
             }
         };
 
+        let verbose = self.verbose_tracing();
         let response = edr_provider::Provider::handle_request(self, request);
 
-        ChainSpecT::cast_response(response)
+        ChainSpecT::cast_response(response, verbose)
     }
 
     fn set_call_override_callback(&self, call_override_callback: Arc<dyn SyncCallOverride>) {
@@ -82,5 +86,9 @@ impl<ChainSpecT: SyncNapiSpec<TimerT>, TimerT: Clone + TimeSinceEpoch> SyncProvi
 
     fn set_verbose_tracing(&self, enabled: bool) {
         self.set_verbose_tracing(enabled);
+    }
+
+    fn verbose_tracing(&self) -> bool {
+        self.verbose_tracing()
     }
 }

@@ -5,15 +5,14 @@
 // the original API while we rewrite the stack trace refinement to Rust.
 #![cfg_attr(test, allow(dead_code))]
 
-use std::sync::Arc;
-
 use edr_chain_spec::EvmHaltReason;
+use edr_chain_spec_evm::interpreter::{InstructionResult, SuccessOrHalt};
 use edr_primitives::bytecode::opcode::OpCode;
-use edr_tracing::BeforeMessage;
-use napi::bindgen_prelude::{BigInt, Either3, Uint8Array};
+use edr_solidity_tests::traces::{CallKind, CallTraceArena, TraceMemberOrder};
+use napi::bindgen_prelude::{BigInt, Either, Either3, Uint8Array};
 use napi_derive::napi;
 
-use crate::result::ExecutionResult;
+use crate::result::{ExceptionalHalt, SuccessReason};
 
 mod library_utils;
 
@@ -23,6 +22,7 @@ mod model;
 mod return_data;
 pub mod solidity_stack_trace;
 
+/// Matches Hardhat's `MinimalMessage` interface.
 #[napi(object)]
 pub struct TracingMessage {
     /// Sender address
@@ -33,88 +33,41 @@ pub struct TracingMessage {
     #[napi(readonly)]
     pub to: Option<Uint8Array>,
 
-    /// Whether it's a static call
-    #[napi(readonly)]
-    pub is_static_call: bool,
-
-    /// Transaction gas limit
-    #[napi(readonly)]
-    pub gas_limit: BigInt,
-
-    /// Depth of the message
-    #[napi(readonly)]
-    pub depth: u8,
-
-    /// Input data of the message
-    #[napi(readonly)]
-    pub data: Uint8Array,
-
-    /// Value sent in the message
-    #[napi(readonly)]
-    pub value: BigInt,
-
     /// Address of the code that is being executed. Can be different from `to`
     /// if a delegate call is being done.
     #[napi(readonly)]
     pub code_address: Option<Uint8Array>,
 
-    /// Code of the contract that is being executed.
+    /// Value sent in the message
     #[napi(readonly)]
-    pub code: Option<Uint8Array>,
+    pub value: BigInt,
+
+    /// Input data of the message
+    #[napi(readonly)]
+    pub data: Uint8Array,
+
+    /// Transaction gas limit
+    #[napi(readonly)]
+    pub gas_limit: BigInt,
+
+    /// Whether it's a static call
+    #[napi(readonly)]
+    pub is_static_call: bool,
 }
 
-impl From<&BeforeMessage> for TracingMessage {
-    fn from(value: &BeforeMessage) -> Self {
-        // Deconstruct to make sure all fields are handled
-        let BeforeMessage {
-            depth,
-            caller,
-            to,
-            is_static_call,
-            gas_limit,
-            data,
-            value,
-            code_address,
-            code,
-        } = value;
-
-        let data = Uint8Array::with_data_copied(data);
-
-        let code = code
-            .as_ref()
-            .map(|code| Uint8Array::with_data_copied(code.original_bytes()));
-
-        TracingMessage {
-            caller: Uint8Array::with_data_copied(caller),
-            to: to.as_ref().map(Uint8Array::with_data_copied),
-            gas_limit: BigInt::from(*gas_limit),
-            is_static_call: *is_static_call,
-            depth: *depth as u8,
-            data,
-            value: BigInt {
-                sign_bit: false,
-                words: value.into_limbs().to_vec(),
-            },
-            code_address: code_address.as_ref().map(Uint8Array::with_data_copied),
-            code,
-        }
-    }
-}
-
+/// Matches Hardhat's `MinimalInterpreterStep` interface.
 #[napi(object)]
 pub struct TracingStep {
-    /// Call depth
-    #[napi(readonly)]
-    pub depth: u8,
     /// The program counter
     #[napi(readonly)]
-    pub pc: BigInt,
-    /// The executed op code
+    pub pc: u32,
+    /// Call depth
     #[napi(readonly)]
-    pub opcode: String,
-    /// The entries on the stack. It only contains the top element unless
-    /// verbose tracing is enabled. The vector is empty if there are no elements
-    /// on the stack.
+    pub depth: u32,
+    /// The executed opcode
+    #[napi(readonly)]
+    pub opcode: TracingOpcode,
+    /// The entries on the stack.
     #[napi(readonly)]
     pub stack: Vec<BigInt>,
     /// The memory at the step. None if verbose tracing is disabled.
@@ -122,27 +75,40 @@ pub struct TracingStep {
     pub memory: Option<Uint8Array>,
 }
 
-impl TracingStep {
-    pub fn new(step: &edr_tracing::Step) -> Self {
-        let stack = step.stack.full().map_or_else(
-            || {
-                step.stack
-                    .top()
-                    .map(u256_to_bigint)
-                    .map_or_else(Vec::default, |top| vec![top])
-            },
-            |stack| stack.iter().map(u256_to_bigint).collect(),
-        );
-        let memory = step.memory.as_ref().map(Uint8Array::with_data_copied);
+/// Opcode information for a tracing step.
+#[napi(object)]
+pub struct TracingOpcode {
+    /// The name of the opcode
+    #[napi(readonly)]
+    pub name: String,
+}
 
-        Self {
-            depth: step.depth as u8,
-            pc: BigInt::from(u64::from(step.pc)),
-            opcode: OpCode::name_by_op(step.opcode).to_string(),
-            stack,
-            memory,
-        }
-    }
+/// Matches Hardhat's `MinimalEVMResult` interface.
+#[napi(object)]
+pub struct TracingMessageResult {
+    /// The execution result
+    #[napi(readonly)]
+    pub exec_result: TracingExecResult,
+}
+
+/// Matches Hardhat's `MinimalExecResult` interface.
+#[napi(object)]
+pub struct TracingExecResult {
+    /// Whether execution succeeded
+    #[napi(readonly)]
+    pub success: bool,
+    /// Gas used during execution
+    #[napi(readonly)]
+    pub execution_gas_used: BigInt,
+    /// Address of the created contract, if any
+    #[napi(readonly)]
+    pub contract_address: Option<Uint8Array>,
+    /// The reason for the exit (success or halt)
+    #[napi(readonly)]
+    pub reason: Option<Either<SuccessReason, ExceptionalHalt>>,
+    /// The output data
+    #[napi(readonly)]
+    pub output: Option<Uint8Array>,
 }
 
 pub(crate) fn u256_to_bigint(v: &edr_primitives::U256) -> BigInt {
@@ -152,22 +118,17 @@ pub(crate) fn u256_to_bigint(v: &edr_primitives::U256) -> BigInt {
     }
 }
 
-#[napi(object)]
-pub struct TracingMessageResult {
-    /// Execution result
-    #[napi(readonly)]
-    pub execution_result: ExecutionResult,
-}
-
 #[napi]
 #[derive(Clone)]
 pub struct RawTrace {
-    inner: Arc<edr_tracing::Trace<EvmHaltReason>>,
+    arena: CallTraceArena,
+    verbose: bool,
 }
 
-impl From<Arc<edr_tracing::Trace<EvmHaltReason>>> for RawTrace {
-    fn from(value: Arc<edr_tracing::Trace<EvmHaltReason>>) -> Self {
-        Self { inner: value }
+impl RawTrace {
+    /// Creates a new `RawTrace` from a `CallTraceArena` and verbose flag.
+    pub fn new(arena: CallTraceArena, verbose: bool) -> Self {
+        Self { arena, verbose }
     }
 }
 
@@ -175,18 +136,122 @@ impl From<Arc<edr_tracing::Trace<EvmHaltReason>>> for RawTrace {
 impl RawTrace {
     #[napi(getter)]
     pub fn trace(&self) -> Vec<Either3<TracingMessage, TracingStep, TracingMessageResult>> {
-        self.inner
-            .messages
-            .iter()
-            .map(|message| match message {
-                edr_tracing::TraceMessage::Before(message) => {
-                    Either3::A(TracingMessage::from(message))
-                }
-                edr_tracing::TraceMessage::Step(step) => Either3::B(TracingStep::new(step)),
-                edr_tracing::TraceMessage::After(message) => Either3::C(TracingMessageResult {
-                    execution_result: ExecutionResult::from(message),
-                }),
-            })
-            .collect()
+        let mut result = Vec::new();
+        if !self.arena.nodes().is_empty() {
+            convert_node(&self.arena, 0, self.verbose, &mut result);
+        }
+        result
+    }
+}
+
+/// DFS traversal of the arena, emitting Before/Step/After messages in the flat
+/// order that the old `TraceCollector` used to produce.
+fn convert_node(
+    arena: &CallTraceArena,
+    node_idx: usize,
+    verbose: bool,
+    output: &mut Vec<Either3<TracingMessage, TracingStep, TracingMessageResult>>,
+) {
+    let node = &arena.nodes()[node_idx];
+    let trace = &node.trace;
+
+    // 1. Emit BeforeMessage (TracingMessage)
+    let is_create = trace.kind.is_any_create();
+
+    output.push(Either3::A(TracingMessage {
+        caller: Uint8Array::with_data_copied(trace.caller.as_slice()),
+        to: if is_create {
+            None
+        } else {
+            Some(Uint8Array::with_data_copied(trace.address.as_slice()))
+        },
+        code_address: if is_create {
+            None
+        } else {
+            Some(Uint8Array::with_data_copied(trace.address.as_slice()))
+        },
+        value: u256_to_bigint(&trace.value),
+        data: Uint8Array::with_data_copied(&trace.data),
+        gas_limit: BigInt::from(trace.gas_limit),
+        is_static_call: trace.kind == CallKind::StaticCall,
+    }));
+
+    // 2. Walk ordering entries
+    for ord in &node.ordering {
+        match *ord {
+            TraceMemberOrder::Step(i) => {
+                let step = &trace.steps[i];
+                let stack = if verbose {
+                    // Full stack
+                    step.stack
+                        .as_ref()
+                        .map(|s| s.iter().map(u256_to_bigint).collect())
+                        .unwrap_or_default()
+                } else {
+                    // Top of stack only
+                    step.stack
+                        .as_ref()
+                        .and_then(|s| s.last().map(|v| vec![u256_to_bigint(v)]))
+                        .unwrap_or_default()
+                };
+                let memory = step
+                    .memory
+                    .as_ref()
+                    .map(|m| Uint8Array::with_data_copied(m.as_bytes()));
+
+                output.push(Either3::B(TracingStep {
+                    pc: step.pc as u32,
+                    depth: trace.depth as u32,
+                    opcode: TracingOpcode {
+                        name: OpCode::name_by_op(step.op.get()).to_string(),
+                    },
+                    stack,
+                    memory,
+                }));
+            }
+            TraceMemberOrder::Call(i) => {
+                let child_idx = node.children[i];
+                convert_node(arena, child_idx, verbose, output);
+            }
+            TraceMemberOrder::Log(_) => {
+                // Logs are not part of the old trace format
+            }
+        }
+    }
+
+    // 3. Emit AfterMessage (TracingMessageResult)
+    let reason = convert_status(trace.status);
+
+    let contract_address = if is_create && trace.success {
+        Some(Uint8Array::with_data_copied(trace.address.as_slice()))
+    } else {
+        None
+    };
+
+    output.push(Either3::C(TracingMessageResult {
+        exec_result: TracingExecResult {
+            // Use the trace.success field directly since it accounts for
+            // edge cases that SuccessOrHalt may not (e.g. when status is None)
+            success: trace.success,
+            execution_gas_used: BigInt::from(trace.gas_used),
+            contract_address,
+            reason,
+            output: Some(Uint8Array::with_data_copied(&trace.output)),
+        },
+    }));
+}
+
+/// Converts an `InstructionResult` status into an optional reason.
+fn convert_status(
+    status: Option<InstructionResult>,
+) -> Option<Either<SuccessReason, ExceptionalHalt>> {
+    let status = status?;
+
+    let success_or_halt: SuccessOrHalt<EvmHaltReason> = status.into();
+    match success_or_halt {
+        SuccessOrHalt::Success(reason) => Some(Either::A(SuccessReason::from(reason))),
+        SuccessOrHalt::Revert => None,
+        SuccessOrHalt::Halt(reason) => Some(Either::B(ExceptionalHalt::from(reason))),
+        SuccessOrHalt::FatalExternalError | SuccessOrHalt::Internal(_) => None,
     }
 }

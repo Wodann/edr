@@ -30,6 +30,7 @@ impl SyncProvider for MockProvider {
                 data,
                 stack_trace_result: None,
                 call_trace_arenas: Vec::new(),
+                verbose: false,
             })
             .map_err(|error| napi::Error::new(napi::Status::GenericFailure, error.to_string()))
     }
@@ -41,6 +42,10 @@ impl SyncProvider for MockProvider {
     }
 
     fn set_verbose_tracing(&self, _enabled: bool) {}
+
+    fn verbose_tracing(&self) -> bool {
+        false
+    }
 }
 
 #[napi]
