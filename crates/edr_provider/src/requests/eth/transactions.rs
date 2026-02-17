@@ -306,7 +306,7 @@ fn send_raw_transaction_and_log<
 
         if let Some(failure) = transaction_failure {
             let (_transaction_hash, traces) =
-                result.into_hash_and_call_traces(data.include_call_traces());
+                result.into_hash_and_call_traces();
 
             return Err(ProviderError::TransactionFailed(Box::new(
                 TransactionFailureWithCallTraces {
@@ -317,7 +317,7 @@ fn send_raw_transaction_and_log<
         }
     }
 
-    Ok(result.into_hash_and_call_traces(data.include_call_traces()))
+    Ok(result.into_hash_and_call_traces())
 }
 
 fn validate_send_raw_transaction_request<
