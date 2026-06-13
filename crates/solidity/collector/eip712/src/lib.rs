@@ -11,6 +11,7 @@
 //! a single type without conversions.
 
 mod collector;
+mod provider;
 mod resolver;
 mod types;
 
@@ -19,5 +20,6 @@ pub use crate::{
         collect_eip712_canonical_types, collect_from_compilation_unit, CollectError,
         Eip712Collection, LookupError,
     },
+    provider::{CachedEip712TypeProvider, Eip712TypeProvider, SharedEip712TypeProvider},
     types::{Eip712Error, Eip712TypeDef},
 };

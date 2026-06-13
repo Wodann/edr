@@ -25,13 +25,6 @@ pub enum Eip712Error {
         /// Why canonicalization failed.
         reason: String,
     },
-
-    /// Two type definitions share the same primary-type name.
-    #[error("duplicate EIP-712 type definition {name}")]
-    DuplicateTypeDef {
-        /// The conflicting primary-type name.
-        name: String,
-    },
 }
 
 /// An EIP-712 type definition in canonical form, paired with its

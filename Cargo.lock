@@ -3620,7 +3620,9 @@ name = "edr_solidity_collector_eip712"
 version = "0.3.8"
 dependencies = [
  "alloy-dyn-abi",
+ "edr_artifact",
  "edr_common",
+ "rayon",
  "semver 1.0.28",
  "slang_solidity_v2",
  "thiserror 2.0.18",

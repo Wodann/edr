@@ -18,8 +18,9 @@ use revm::{context::result::HaltReasonTr, context_interface::JournalTr as _};
 
 #[allow(clippy::wildcard_imports)]
 use crate::{
-    config::Eip712TypeDef, impl_is_pure_false, impl_is_pure_true, Cheatcode, Cheatcodes,
-    CheatcodesExecutor, CheatsCtxt, Result, Vm::*,
+    config::{Eip712TypeDef, SuiteEip712TypeProvider},
+    impl_is_pure_false, impl_is_pure_true, Cheatcode, Cheatcodes, CheatcodesExecutor, CheatsCtxt,
+    Result, Vm::*,
 };
 
 /// Contains locations of traces ignored via cheatcodes.
@@ -1098,7 +1099,7 @@ impl Cheatcode for eip712HashType_0Call {
         } = self;
 
         let type_def =
-            get_canonical_type_def(typeNameOrDefinition, &state.config.eip712_types_by_name)?;
+            get_canonical_type_def(typeNameOrDefinition, &state.config.eip712_provider)?;
         Ok(keccak256(type_def.canonical_definition().as_bytes()).to_vec())
     }
 }
@@ -1140,7 +1141,7 @@ impl Cheatcode for eip712HashStruct_0Call {
         } = self;
 
         let type_def =
-            get_canonical_type_def(typeNameOrDefinition, &state.config.eip712_types_by_name)?;
+            get_canonical_type_def(typeNameOrDefinition, &state.config.eip712_provider)?;
 
         get_struct_hash(&type_def, abiEncodedData)
     }
@@ -1281,18 +1282,16 @@ fn random_int<
 ///
 /// - an inline type definition string (detected by the presence of `(`), which
 ///   is parsed and canonicalized on demand, or
-/// - a type name, looked up in the `eip712CanonicalTypes` runner config.
+/// - a type name, lazily resolved by parsing the running test contract's
+///   Solidity sources via the EIP-712 type provider.
 fn get_canonical_type_def(
     name_or_def: &str,
-    eip712_types_by_name: &std::collections::HashMap<String, Eip712TypeDef>,
+    eip712_provider: &SuiteEip712TypeProvider,
 ) -> Result<Eip712TypeDef> {
     if name_or_def.contains('(') {
         Eip712TypeDef::parse(name_or_def).map_err(|error| fmt_err!("{error}"))
     } else {
-        eip712_types_by_name
-            .get(name_or_def)
-            .cloned()
-            .ok_or_else(|| fmt_err!("'{name_or_def}' not defined in `eip712CanonicalTypes`"))
+        eip712_provider.type_def(name_or_def)
     }
 }
 
