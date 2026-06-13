@@ -3197,6 +3197,7 @@ dependencies = [
  "edr_scenarios",
  "edr_signer",
  "edr_solidity",
+ "edr_solidity_collector_eip712",
  "edr_solidity_tests",
  "edr_state_api",
  "edr_tracing",

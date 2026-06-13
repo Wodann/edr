@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use derive_more::Debug;
 use edr_primitives::hex;
+use edr_solidity_collector_eip712::SharedEip712TypeProvider;
 use edr_solidity_tests::{
     executors::invariant::InvariantConfig,
     fuzz::FuzzConfig,
@@ -317,7 +318,7 @@ impl SolidityTestRunnerConfigArgs {
                 })
                 .transpose()?
                 .unwrap_or_default(),
-            eip712_provider: foundry_cheatcodes::SharedEip712TypeProvider::new(
+            eip712_provider: SharedEip712TypeProvider::new(
                 PathBuf::from(project_root.clone()),
                 eip712_import_mappings
                     .unwrap_or_default()

@@ -8,6 +8,7 @@ use std::{
 use alloy_primitives::{map::AddressHashMap, U256};
 use edr_artifact::ArtifactId;
 use edr_common::fs::normalize_path;
+use edr_solidity_collector_eip712::{Eip712TypeDef, SharedEip712TypeProvider};
 use foundry_compilers::utils::canonicalize;
 use foundry_evm_core::{contracts::ContractsByArtifact, evm_context::HardforkTr, opts::EvmOpts};
 
@@ -134,8 +135,6 @@ pub struct TestFunctionIdentifier {
     /// The function selector as hex string
     pub function_selector: String,
 }
-
-pub use edr_solidity_collector_eip712::{Eip712Error, Eip712TypeDef, SharedEip712TypeProvider};
 
 /// EIP-712 type provider scoped to a single test suite's running artifact.
 ///
@@ -1042,5 +1041,4 @@ mod tests {
             .ensure_path_allowed("./out/OtherFile.sol", FsAccessKind::Write)
             .is_ok());
     }
-
 }
