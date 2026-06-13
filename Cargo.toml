@@ -42,6 +42,7 @@ members = [
     "crates/edr_signer",
     "crates/edr_solidity",
     "crates/edr_solidity_tests",
+    "crates/solidity/collector/eip712",
     "crates/edr_test_utils",
     "crates/edr_transaction",
     "crates/eips/1559",
@@ -182,6 +183,7 @@ edr_runtime = { path = "crates/edr_runtime" }
 edr_scenarios = { path = "crates/edr_scenarios" }
 edr_signer = { path = "crates/edr_signer" }
 edr_solidity = { path = "crates/edr_solidity" }
+edr_solidity_collector_eip712 = { path = "crates/solidity/collector/eip712" }
 edr_solidity_tests = { path = "crates/edr_solidity_tests" }
 edr_state_api = { path = "crates/state/api" }
 edr_state_fork = { path = "crates/state/fork" }

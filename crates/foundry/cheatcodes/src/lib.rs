@@ -14,8 +14,8 @@ extern crate tracing;
 
 use alloy_primitives::Address;
 pub use config::{
-    parse_eip712_canonical_types, CheatsConfig, CheatsConfigOptions, ExecutionContextConfig,
-    TestFunctionIdentifier,
+    parse_eip712_canonical_types, CheatsConfig, CheatsConfigOptions, Eip712Error, Eip712TypeDef,
+    ExecutionContextConfig, TestFunctionIdentifier,
 };
 pub use endpoints::{RpcEndpoint, RpcEndpointUrl, RpcEndpoints};
 pub use error::{Error, ErrorKind, Result};
