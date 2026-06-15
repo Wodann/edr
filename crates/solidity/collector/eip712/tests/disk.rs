@@ -4,7 +4,9 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use edr_solidity_collector_eip712::{collect_eip712_canonical_types, CollectError, LookupError};
+use edr_solidity_collector_eip712::{
+    collect_eip712_types_for_file, CollectError, ImportResolver, LookupError,
+};
 use semver::Version;
 
 fn fixture(relative: &str) -> PathBuf {
@@ -19,9 +21,12 @@ fn solc() -> Version {
 
 #[test]
 fn resolves_relative_imports() {
-    let collection =
-        collect_eip712_canonical_types(&fixture("relative/Root.sol"), &solc(), &HashMap::new())
-            .expect("collection should succeed");
+    let collection = collect_eip712_types_for_file(
+        &fixture("relative/Root.sol"),
+        &solc(),
+        &ImportResolver::default(),
+    )
+    .expect("collection should succeed");
 
     assert_eq!(
         collection.get("Mail").unwrap().canonical_definition(),
@@ -32,11 +37,17 @@ fn resolves_relative_imports() {
 #[test]
 fn resolves_mapped_imports() {
     let mut import_map = HashMap::new();
-    import_map.insert("@lib/Token.sol".to_string(), fixture("mapped/lib/Token.sol"));
+    import_map.insert(
+        "@lib/Token.sol".to_string(),
+        fixture("mapped/lib/Token.sol"),
+    );
 
-    let collection =
-        collect_eip712_canonical_types(&fixture("mapped/Root.sol"), &solc(), &import_map)
-            .expect("collection should succeed");
+    let collection = collect_eip712_types_for_file(
+        &fixture("mapped/Root.sol"),
+        &solc(),
+        &ImportResolver::new(import_map),
+    )
+    .expect("collection should succeed");
 
     assert_eq!(
         collection.get("Payment").unwrap().canonical_definition(),
@@ -49,9 +60,12 @@ fn unmapped_import_leaves_dependency_unresolved_but_unit_builds() {
     // No import mapping supplied: the import is unresolved (a diagnostic, not a
     // hard error). `Payment` depends on the missing `Token`, so it is not
     // usable, but collection itself still succeeds.
-    let collection =
-        collect_eip712_canonical_types(&fixture("mapped/Root.sol"), &solc(), &HashMap::new())
-            .expect("collection should still succeed despite the unresolved import");
+    let collection = collect_eip712_types_for_file(
+        &fixture("mapped/Root.sol"),
+        &solc(),
+        &ImportResolver::default(),
+    )
+    .expect("collection should still succeed despite the unresolved import");
 
     assert!(matches!(
         collection.get("Token"),
@@ -61,19 +75,22 @@ fn unmapped_import_leaves_dependency_unresolved_but_unit_builds() {
 
 #[test]
 fn missing_root_file_is_an_error() {
-    let error =
-        collect_eip712_canonical_types(&fixture("does/not/exist.sol"), &solc(), &HashMap::new())
-            .unwrap_err();
+    let error = collect_eip712_types_for_file(
+        &fixture("does/not/exist.sol"),
+        &solc(),
+        &ImportResolver::default(),
+    )
+    .unwrap_err();
     assert!(matches!(error, CollectError::RootFileNotFound { .. }));
 }
 
 #[test]
 fn unsupported_solc_version_is_an_error() {
-    let error = collect_eip712_canonical_types(
+    let error = collect_eip712_types_for_file(
         &fixture("relative/Root.sol"),
         &Version::new(0, 7, 6),
-        &HashMap::new(),
+        &ImportResolver::default(),
     )
     .unwrap_err();
-    assert!(matches!(error, CollectError::UnsupportedSolcVersion { .. }));
+    assert!(matches!(error, CollectError::InvalidSolcVersion { .. }));
 }

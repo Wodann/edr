@@ -9,17 +9,20 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use semver::Version;
 use slang_solidity_v2::{
     ast::{Definition, Type},
     compilation::{CompilationBuilder, CompilationUnit},
-    utils::LanguageVersion,
+    utils::{FromSemverError, LanguageVersion},
 };
 
-use crate::{resolver::DiskResolver, types::Eip712TypeDef};
+use crate::{
+    resolver::{ImportResolver, SourceProvider},
+    types::Eip712TypeDef,
+};
 
 /// A set of EIP-712 canonical type definitions collected from a compilation
 /// unit, keyed by primary type name.
@@ -81,15 +84,9 @@ impl Eip712Collection {
 /// rejections, which are surfaced lazily via [`Eip712Collection::get`]).
 #[derive(Debug, thiserror::Error)]
 pub enum CollectError {
-    /// The solc version is outside the range Slang v2 can parse (`< 0.8.0`).
-    #[error(
-        "unsupported solc version {version} for EIP-712 source parsing \
-         (Slang v2 supports 0.8.0 and later)"
-    )]
-    UnsupportedSolcVersion {
-        /// The offending version.
-        version: Version,
-    },
+    /// The provided solc version is invalid.
+    #[error(transparent)]
+    InvalidSolcVersion(#[from] FromSemverError),
 
     /// The root source file could not be read.
     #[error("could not read EIP-712 root source {path}: {reason}")]
@@ -108,10 +105,10 @@ pub enum CollectError {
 /// the importing file. Parse errors and unresolved imports degrade gracefully
 /// — structs that still resolve are collected — but a missing root file is a
 /// hard error.
-pub fn collect_eip712_canonical_types(
+pub fn collect_eip712_types_for_file(
     root_source: &Path,
     solc_version: &Version,
-    import_map: &HashMap<String, PathBuf>,
+    import_resolver: &ImportResolver,
 ) -> Result<Eip712Collection, CollectError> {
     let language_version = to_language_version(solc_version)?;
 
@@ -125,43 +122,44 @@ pub fn collect_eip712_canonical_types(
     }
 
     let mut builder =
-        CompilationBuilder::create(language_version, DiskResolver::new(import_map.clone()));
+        CompilationBuilder::create(language_version, SourceProvider::new(import_resolver));
     builder.add_file(root_source.to_string_lossy().into_owned());
     let unit = builder.build();
 
-    Ok(collect_from_compilation_unit(&unit))
-}
-
-/// Maps a solc [`Version`] to a Slang [`LanguageVersion`], stripping
-/// pre-release/build metadata and clamping versions newer than Slang supports
-/// down to its latest grammar.
-fn to_language_version(solc_version: &Version) -> Result<LanguageVersion, CollectError> {
-    let cleaned = Version::new(solc_version.major, solc_version.minor, solc_version.patch);
-    if let Ok(version) = LanguageVersion::try_from(cleaned.clone()) {
-        return Ok(version);
-    }
-
-    // try_from only fails for versions outside [0.8.0, LATEST]. Clamp anything
-    // newer to LATEST; reject anything older (no <0.8 grammar in Slang v2).
-    let latest: Version = LanguageVersion::LATEST.into();
-    if cleaned > latest {
-        Ok(LanguageVersion::LATEST)
-    } else {
-        Err(CollectError::UnsupportedSolcVersion {
-            version: solc_version.clone(),
-        })
-    }
+    Ok(collect_eip712_types_from_compilation_unit(&unit))
 }
 
 /// Core collection logic, decoupled from disk so it can be unit-tested against
 /// an in-memory compilation unit.
-pub fn collect_from_compilation_unit(unit: &CompilationUnit) -> Eip712Collection {
+pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip712Collection {
     let collected = collect_structs(unit);
     let all_struct_names: HashSet<String> = collected.iter().map(|s| s.name.clone()).collect();
 
     let (by_name, mut rejected) = index_by_name(collected);
     mark_non_encodable(&by_name, &all_struct_names, &mut rejected);
     emit(&by_name, &all_struct_names, rejected)
+}
+
+/// Maps a solc [`Version`] to a Slang [`LanguageVersion`]; clamping versions
+/// newer than Slang supports down to its latest grammar.
+fn to_language_version(solc_version: &Version) -> Result<LanguageVersion, FromSemverError> {
+    // Strip pre-release/build metadata: `try_from` rejects it, but a solc
+    // version like `0.8.24+commit.abcdef` should still map to 0.8.24.
+    let stripped = Version::new(solc_version.major, solc_version.minor, solc_version.patch);
+    match LanguageVersion::try_from(stripped) {
+        Ok(version) => Ok(version),
+        Err(FromSemverError::UnsupportedVersion) => {
+            // try_from only fails for versions outside [0.8.0, LATEST]. Clamp anything
+            // newer to LATEST; reject anything older (no <0.8 grammar in Slang v2).
+            let latest: Version = LanguageVersion::LATEST.into();
+            if *solc_version > latest {
+                Ok(LanguageVersion::LATEST)
+            } else {
+                Err(FromSemverError::UnsupportedVersion)
+            }
+        }
+        other => other,
+    }
 }
 
 /// A struct definition collected from the AST, with each member's type already
@@ -186,6 +184,7 @@ fn collect_structs(unit: &CompilationUnit) -> Vec<CollectedStruct> {
         let Definition::Struct(struct_def) = definition else {
             continue;
         };
+
         let members = struct_def
             .members()
             .iter()
@@ -194,6 +193,7 @@ fn collect_structs(unit: &CompilationUnit) -> Vec<CollectedStruct> {
                 encoded_type: member.get_type().and_then(|ty| encode_member_type(&ty)),
             })
             .collect();
+
         collected.push(CollectedStruct {
             name: struct_def.name().unparse().to_string(),
             file_id: struct_def.get_file_id().to_string(),
@@ -264,7 +264,7 @@ fn index_by_name(
             continue;
         }
 
-        let fingerprint = fingerprint(&struct_def);
+        let fingerprint = encode_struct(&struct_def);
         match fingerprints.get(&struct_def.name) {
             None => {
                 fingerprints.insert(struct_def.name.clone(), fingerprint);
@@ -294,10 +294,10 @@ fn index_by_name(
     (by_name, rejected)
 }
 
-/// A deterministic fingerprint of a struct's name and members (including
-/// non-encodable members as `<unsupported>`), used to tell identical
-/// re-definitions apart from genuine conflicts.
-fn fingerprint(struct_def: &CollectedStruct) -> String {
+/// Encodes the type of a struct A deterministic fingerprint of a struct's name
+/// and members (including non-encodable members as `<unsupported>`), used to
+/// tell identical re-definitions apart from genuine conflicts.
+fn encode_struct(struct_def: &CollectedStruct) -> String {
     let members: Vec<String> = struct_def
         .members
         .iter()
@@ -307,6 +307,7 @@ fn fingerprint(struct_def: &CollectedStruct) -> String {
             format!("{ty} {name}")
         })
         .collect();
+
     let name = &struct_def.name;
     let body = members.join(",");
     format!("{name}({body})")
@@ -508,13 +509,11 @@ mod tests {
             .iter()
             .map(|(id, src)| ((*id).to_string(), (*src).to_string()))
             .collect();
-        let mut builder = CompilationBuilder::create(
-            LanguageVersion::LATEST,
-            InMemorySources { sources: map },
-        );
+        let mut builder =
+            CompilationBuilder::create(LanguageVersion::LATEST, InMemorySources { sources: map });
         builder.add_file((*root).to_string());
         let unit = builder.build();
-        collect_from_compilation_unit(&unit)
+        collect_eip712_types_from_compilation_unit(&unit)
     }
 
     /// Convenience: collect from a single root source.
@@ -569,10 +568,7 @@ mod tests {
              struct B { C c; }
              struct A { B b; C c; }",
         );
-        assert_eq!(
-            canonical(&collection, "A"),
-            "A(B b,C c)B(C c)C(uint256 v)"
-        );
+        assert_eq!(canonical(&collection, "A"), "A(B b,C c)B(C c)C(uint256 v)");
     }
 
     #[test]
@@ -668,8 +664,9 @@ mod tests {
 
     #[test]
     fn arrays_dynamic_fixed_and_nested() {
-        let collection =
-            collect_one("struct S { uint256[] dynamic; uint256[3] fixed_size; uint256[3][2] nested; }");
+        let collection = collect_one(
+            "struct S { uint256[] dynamic; uint256[3] fixed_size; uint256[3][2] nested; }",
+        );
         assert_eq!(
             canonical(&collection, "S"),
             "S(uint256[] dynamic,uint256[3] fixed_size,uint256[3][2] nested)"
@@ -836,7 +833,7 @@ mod tests {
         fn rejects_versions_older_than_0_8_0() {
             assert!(matches!(
                 to_language_version(&Version::new(0, 7, 6)),
-                Err(CollectError::UnsupportedSolcVersion { .. })
+                Err(FromSemverError::UnsupportedVersion)
             ));
         }
     }

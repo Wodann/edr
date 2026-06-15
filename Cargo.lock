@@ -3621,7 +3621,6 @@ name = "edr_solidity_collector_eip712"
 version = "0.3.8"
 dependencies = [
  "alloy-dyn-abi",
- "edr_artifact",
  "edr_common",
  "rayon",
  "semver 1.0.28",

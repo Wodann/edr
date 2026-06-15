@@ -1,14 +1,5 @@
-//! Collects EIP-712 canonical type definitions from Solidity sources.
-//!
-//! This crate is a Rust port of Hardhat's TypeScript `collectEip712CanonicalTypes`.
-//! Where the TypeScript walks solc JSON ASTs, this crate parses `.sol` files
-//! directly with [Slang v2](https://github.com/NomicFoundation/slang) and walks
-//! the resolved AST.
-//!
-//! It also hosts [`Eip712TypeDef`] — the canonical-form EIP-712 type definition
-//! used by the EDR Solidity-test cheatcodes (`eip712HashType`,
-//! `eip712HashStruct`) — so that producing and consuming canonical types share
-//! a single type without conversions.
+//! Defines EIP-712 types and a means of collecting EIP-712 canonical type
+//! definitions from Solidity sources.
 
 mod collector;
 mod provider;
@@ -17,9 +8,10 @@ mod types;
 
 pub use crate::{
     collector::{
-        collect_eip712_canonical_types, collect_from_compilation_unit, CollectError,
+        collect_eip712_types_for_file, collect_eip712_types_from_compilation_unit, CollectError,
         Eip712Collection, LookupError,
     },
-    provider::{CachedEip712TypeProvider, Eip712TypeProvider, SharedEip712TypeProvider},
+    provider::{AsyncEip712Provider, Eip712Provider, Eip712Root},
+    resolver::ImportResolver,
     types::{Eip712Error, Eip712TypeDef},
 };
