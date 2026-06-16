@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 alloy-dyn-abi = { workspace = true, features = ["eip712"] }
+crossbeam-channel.workspace = true
 edr_common.workspace = true
 rayon = "1"
 semver.workspace = true

@@ -61,11 +61,11 @@ impl Eip712Collection {
             Ok(def)
         } else if let Some(reason) = self.rejected.get(name) {
             Err(LookupError::Rejected {
-                name: name.to_string(),
+                name: name.to_owned(),
                 reason: reason.clone(),
             })
         } else {
-            Err(LookupError::NotFound(name.to_string()))
+            Err(LookupError::NotFound(name.to_owned()))
         }
     }
 
@@ -123,6 +123,7 @@ pub fn collect_eip712_types_for_file(
 
     let mut builder =
         CompilationBuilder::create(language_version, SourceProvider::new(import_resolver));
+
     builder.add_file(root_source.to_string_lossy().into_owned());
     let unit = builder.build();
 
@@ -249,15 +250,24 @@ fn encode_member_type(ty: &Type) -> Option<String> {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum RejectReason {
+    #[error("Conflicting definitions of struct '{name}' in: {}", .file_ids.join(", "))]
+    DuplicateName { name: String, file_ids: Vec<String> },
+}
+
 /// Indexes collected structs by name. Identical definitions (same fingerprint)
 /// dedupe silently; conflicting same-name definitions are removed and recorded
 /// as rejected.
 fn index_by_name(
     collected: Vec<CollectedStruct>,
-) -> (HashMap<String, CollectedStruct>, HashMap<String, String>) {
+) -> (
+    HashMap<String, CollectedStruct>,
+    HashMap<String, RejectReason>,
+) {
     let mut by_name: HashMap<String, CollectedStruct> = HashMap::new();
     let mut fingerprints: HashMap<String, String> = HashMap::new();
-    let mut rejected: HashMap<String, String> = HashMap::new();
+    let mut rejected: HashMap<String, RejectReason> = HashMap::new();
 
     for struct_def in collected {
         if rejected.contains_key(&struct_def.name) {
@@ -273,15 +283,28 @@ fn index_by_name(
             // Identical re-definition (e.g. the same struct seen via two
             // imports): keep one, no error.
             Some(existing) if *existing == fingerprint => {}
-            // Same name, different body: ambiguous. Drop both and reject.
-            Some(_) => {
-                let first_file = by_name
+            // Same name, different body: ambiguous so drop from `by_name` and reject both.
+            Some(existing) => {
+                let reject_entry = rejected.entry(struct_def.name.clone());
+
+                if let Some(first_file) = by_name
                     .remove(&struct_def.name)
-                    .map(|s| s.file_id)
-                    .unwrap_or_default();
-                fingerprints.remove(&struct_def.name);
+                    .map(|s| s.file_id) {
+                        // Since we found a first file, we know the reject reason cannot be `DuplicateName`. Other existing reject reasons take precedence.
+                        reject_entry.or_insert(RejectReason::DuplicateName { name: struct_def.name.clone(), file_ids: vec![first_file, struct_def.file_id] });
+                    } else {
+
+                    }
+
+                rejected.entry(struct_def.name.clone()).and_modify(|reason| match reason {
+                    RejectReason::DuplicateName { name: _name, file_ids } => {
+                        file_ids.push(struct_def.file_id);
+                    }
+                }).or_insert(RejectReason::DuplicateName { name: struct_def.name, file_ids: vec![] });
+
                 rejected.insert(
                     struct_def.name.clone(),
+                    RejectReason::DuplicateName { name: struct_def.name, file_ids: () }
                     format!(
                         "conflicting definitions of struct '{}' in {} and {}",
                         struct_def.name, first_file, struct_def.file_id
