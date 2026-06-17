@@ -8,7 +8,7 @@
 //! implementation and `forge bind-json`.
 
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     path::Path,
 };
 
@@ -21,8 +21,62 @@ use slang_solidity_v2::{
 
 use crate::{
     resolver::{ImportResolver, SourceProvider},
-    types::Eip712TypeDef,
+    Eip712Type,
 };
+
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "struct `{name}` cannot be canonicalized because struct dependency `{dependency}` is missing."
+)]
+pub struct MissingStructDependency {
+    name: String,
+    dependency: String,
+}
+
+impl Eip712Type {
+    /// Canonicalizes the provided encodable struct and its transitive
+    /// dependencies.
+    pub fn canonicalize(
+        root: &EncodableStruct,
+        encodables: &HashMap<String, EncodableStruct>,
+    ) -> Result<Eip712Type, MissingStructDependency> {
+        fn transitive_struct_deps(
+            root: &EncodableStruct,
+            encodables: &HashMap<String, EncodableStruct>,
+        ) -> Result<Vec<String>, MissingStructDependency> {
+            let mut visited = HashSet::new();
+            let mut stack = root.direct_struct_deps.clone();
+
+            while let Some(next) = stack.pop() {
+                if next == root.name || visited.contains(&next) {
+                    continue;
+                }
+
+                let dependency = encodables.get(&next).ok_or(MissingStructDependency {
+                    name: root.name.clone(),
+                    dependency: next.clone(),
+                })?;
+
+                stack.extend(dependency.direct_struct_deps.clone());
+                visited.insert(next.to_owned());
+            }
+
+            Ok(visited.into_iter().collect())
+        }
+
+        let mut dependency_heads = transitive_struct_deps(&root, encodables)?;
+        dependency_heads.sort();
+
+        let name = root.name.clone();
+        let mut canonical_definition = struct_head(root);
+        canonical_definition.push_str(&dependency_heads.concat());
+
+        Ok(Eip712Type {
+            name,
+            canonical_definition,
+        })
+    }
+}
 
 /// A set of EIP-712 canonical type definitions collected from a compilation
 /// unit, keyed by primary type name.
@@ -31,14 +85,14 @@ use crate::{
 /// files, a non-EIP-712-encodable member, or a transitively non-encodable
 /// dependency) are recorded separately so a lookup can explain *why* a type is
 /// unavailable rather than reporting a bare "not found".
-#[derive(Clone, Debug, Default)]
-pub struct Eip712Collection {
-    types: HashMap<String, Eip712TypeDef>,
-    rejected: HashMap<String, String>,
+#[derive(Debug, Default)]
+pub struct Eip712TypeCollection {
+    types: HashMap<String, Eip712Type>,
+    rejected: HashMap<String, RejectReason>,
 }
 
 /// Why a [`Eip712Collection::get`] lookup did not return a type.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum LookupError {
     /// No struct with this name exists in the compilation unit.
     #[error("EIP-712 type '{0}' not found in the test contract's sources")]
@@ -50,13 +104,13 @@ pub enum LookupError {
         /// The requested type name.
         name: String,
         /// Why the type was rejected.
-        reason: String,
+        reason: RejectReason,
     },
 }
 
-impl Eip712Collection {
+impl Eip712TypeCollection {
     /// Looks up a canonical type definition by primary type name.
-    pub fn get(&self, name: &str) -> Result<&Eip712TypeDef, LookupError> {
+    pub fn get(&self, name: &str) -> Result<&Eip712Type, LookupError> {
         if let Some(def) = self.types.get(name) {
             Ok(def)
         } else if let Some(reason) = self.rejected.get(name) {
@@ -109,7 +163,7 @@ pub fn collect_eip712_types_for_file(
     root_source: &Path,
     solc_version: &Version,
     import_resolver: &ImportResolver,
-) -> Result<Eip712Collection, CollectError> {
+) -> Result<Eip712TypeCollection, CollectError> {
     let language_version = to_language_version(solc_version)?;
 
     // Pre-check the root: a build over a missing root only yields a diagnostic
@@ -132,17 +186,32 @@ pub fn collect_eip712_types_for_file(
 
 /// Core collection logic, decoupled from disk so it can be unit-tested against
 /// an in-memory compilation unit.
-pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip712Collection {
+pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip712TypeCollection {
     let collected = collect_structs(unit);
-    let all_struct_names: HashSet<String> = collected.iter().map(|s| s.name.clone()).collect();
 
-    let DedupedCollection {
-        unique,
-        duplicates: mut rejected,
-    } = dedup_by_name(collected);
+    let DedupedCollection { unique, duplicates } = dedup_by_name(collected);
 
-    let encodable = reject_non_encodable(unique, &all_struct_names, &mut rejected);
-    canonicalize(encodable, &all_struct_names, rejected)
+    let EncodableCollection {
+        encodables,
+        non_encodables,
+    } = reject_non_encodable(unique);
+
+    let rejected = duplicates
+        .into_iter()
+        .chain(non_encodables.into_iter())
+        .collect();
+
+    let types = encodables
+        .iter()
+        .map(|(name, root)| {
+            let canonical_type = Eip712Type::canonicalize(root, &encodables)
+                .expect("all dependencies should be encodable");
+
+            (name.clone(), canonical_type)
+        })
+        .collect();
+
+    Eip712TypeCollection { types, rejected }
 }
 
 /// Maps a solc [`Version`] to a Slang [`LanguageVersion`]; clamping versions
@@ -176,33 +245,32 @@ struct CollectedStruct {
     members: Vec<CollectedMember>,
 }
 
-struct EncodableStruct {
-    name: String,
-    file_id: String,
-    members: Vec<EncodableMember>,
+pub(super) struct EncodableStruct {
+    pub(super) name: String,
+    pub(super) members: Vec<EncodableMember>,
+    /// The names of structs directly referenced by a struct's members (array
+    /// suffixes stripped, self-references excluded).
+    pub(super) direct_struct_deps: Vec<String>,
 }
 
-struct CollectedMember {
-    name: String,
-    /// EIP-712 encoded member type, or `None` if not encodable (mapping,
-    /// function, fixed-point, unresolved, …).
-    encoded_type: Option<String>,
-}
-
-struct EncodableMember {
-    name: String,
-    encoded_type: String,
-}
-
-impl TryFrom<CollectedStruct> for EncodableStruct {
-    type Error = RejectReason;
-
-    fn try_from(value: CollectedStruct) -> Result<Self, Self::Error> {
+impl EncodableStruct {
+    /// Constructs a new instance from a [`CollectedStruct`], rejecting it if
+    /// any member is not encodable.
+    pub fn new(
+        struct_def: CollectedStruct,
+        is_struct_fn: impl Fn(&str) -> bool,
+    ) -> Result<Self, RejectReason> {
         let mut members = Vec::new();
         let mut non_encodable_members = Vec::new();
+        let mut direct_struct_deps = Vec::new();
 
-        for member in value.members {
+        for member in struct_def.members {
             if let Some(encoded_type) = member.encoded_type {
+                let base = base_type_name(encoded_type.as_str());
+                if base != struct_def.name && is_struct_fn(base) {
+                    direct_struct_deps.push(base.to_owned());
+                }
+
                 members.push(EncodableMember {
                     name: member.name,
                     encoded_type,
@@ -218,12 +286,25 @@ impl TryFrom<CollectedStruct> for EncodableStruct {
             });
         }
 
-        Ok(EncodableStruct {
-            name: value.name,
-            file_id: value.file_id,
+        Ok(Self {
+            name: struct_def.name,
             members,
+            direct_struct_deps,
         })
     }
+}
+
+#[derive(Clone)]
+struct CollectedMember {
+    name: String,
+    /// EIP-712 encoded member type, or `None` if not encodable (mapping,
+    /// function, fixed-point, unresolved, …).
+    encoded_type: Option<String>,
+}
+
+struct EncodableMember {
+    name: String,
+    encoded_type: String,
 }
 
 /// Walks every struct definition in the unit and encodes its members.
@@ -238,14 +319,14 @@ fn collect_structs(unit: &CompilationUnit) -> Vec<CollectedStruct> {
             .members()
             .iter()
             .map(|member| CollectedMember {
-                name: member.name().unparse().to_string(),
+                name: member.name().unparse().to_owned(),
                 encoded_type: member.get_type().and_then(|ty| encode_member_type(&ty)),
             })
             .collect();
 
         collected.push(CollectedStruct {
-            name: struct_def.name().unparse().to_string(),
-            file_id: struct_def.get_file_id().to_string(),
+            name: struct_def.name().unparse().to_owned(),
+            file_id: struct_def.get_file_id().to_owned(),
             members,
         });
     }
@@ -260,9 +341,9 @@ fn collect_structs(unit: &CompilationUnit) -> Vec<CollectedStruct> {
 fn encode_member_type(ty: &Type) -> Option<String> {
     match ty {
         Type::Address(_) | Type::Contract(_) | Type::Interface(_) | Type::Library(_) => {
-            Some("address".to_string())
+            Some("address".to_owned())
         }
-        Type::Boolean(_) => Some("bool".to_string()),
+        Type::Boolean(_) => Some("bool".to_owned()),
         Type::Integer(integer) => {
             let prefix = if integer.signed() { "" } else { "u" };
             let bits = integer.bits();
@@ -272,11 +353,11 @@ fn encode_member_type(ty: &Type) -> Option<String> {
             let width = byte_array.width();
             Some(format!("bytes{width}"))
         }
-        Type::Bytes(_) => Some("bytes".to_string()),
-        Type::String(_) => Some("string".to_string()),
-        Type::Enum(_) => Some("uint8".to_string()),
+        Type::Bytes(_) => Some("bytes".to_owned()),
+        Type::String(_) => Some("string".to_owned()),
+        Type::Enum(_) => Some("uint8".to_owned()),
         Type::Struct(struct_type) => match struct_type.definition() {
-            Definition::Struct(struct_def) => Some(struct_def.name().unparse().to_string()),
+            Definition::Struct(struct_def) => Some(struct_def.name().unparse().to_owned()),
             _ => None,
         },
         Type::UserDefinedValue(udvt) => udvt.target_type().as_ref().and_then(encode_member_type),
@@ -298,7 +379,7 @@ fn encode_member_type(ty: &Type) -> Option<String> {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum RejectReason {
     #[error("Conflicting definitions of struct '{name}' in: {}", .file_ids.join(", "))]
     Duplicate { name: String, file_ids: Vec<String> },
@@ -376,43 +457,52 @@ fn make_fingerprint(struct_def: &CollectedStruct) -> String {
     format!("{name}({body})")
 }
 
-/// Rejects structs with non-encodable members, and any struct that depends on
-/// them transitively.
-fn reject_non_encodable(
-    collected: HashMap<String, CollectedStruct>,
-    all_struct_names: &HashSet<String>,
-    rejected: &mut HashMap<String, RejectReason>,
-) -> HashMap<String, EncodableStruct> {
+/// A set of encodable structs, keyed by name, along with the names of rejected
+/// structs and why they were rejected.
+pub struct EncodableCollection {
+    pub encodables: HashMap<String, EncodableStruct>,
+    pub non_encodables: HashMap<String, RejectReason>,
+}
+
+/// Rejects structs that (transitively) reference non-encodable structs.
+fn reject_non_encodable(collected: HashMap<String, CollectedStruct>) -> EncodableCollection {
     let mut encodables = HashMap::new();
-    let mut non_encodables = HashMap::new();
+    let mut newly_rejected = HashMap::new();
+
+    let struct_names: HashSet<String> = collected.keys().cloned().collect();
 
     for (name, struct_def) in collected {
-        match EncodableStruct::try_from(struct_def) {
+        match EncodableStruct::new(struct_def, |struct_name| struct_names.contains(struct_name)) {
             Ok(encodable) => {
                 encodables.insert(name, encodable);
             }
             Err(reason) => {
-                non_encodables.insert(name, reason);
+                newly_rejected.insert(name, reason);
             }
         }
     }
 
-    while !non_encodables.is_empty() {
-        for name in non_encodables.keys() {
+    // Reject structs that transitively reference non-encodable structs, until we
+    // reach a fixed point where no encodable struct references a rejected one.
+    let mut rejected = HashMap::new();
+    while !newly_rejected.is_empty() {
+        for name in newly_rejected.keys() {
             encodables.remove(name);
         }
 
-        // Take `non_encodables` so it's reset for the next iteration
-        rejected.extend(std::mem::take(&mut non_encodables));
+        // Take `newly_rejected` so it's reset for the next iteration
+        rejected.extend(std::mem::take(&mut newly_rejected));
 
-        for (name, struct_def) in &encodables {
-            let non_encodable_members = direct_struct_deps(&struct_def, all_struct_names)
-                .into_iter()
+        for (name, encodable) in &encodables {
+            let non_encodable_members = encodable
+                .direct_struct_deps
+                .iter()
                 .filter(|dependency| rejected.contains_key(*dependency))
                 .map(ToOwned::to_owned)
                 .collect::<Vec<_>>();
+
             if !non_encodable_members.is_empty() {
-                non_encodables.insert(
+                newly_rejected.insert(
                     name.clone(),
                     RejectReason::NonEncodableMembers {
                         members: non_encodable_members,
@@ -422,23 +512,10 @@ fn reject_non_encodable(
         }
     }
 
-    encodables
-}
-
-/// The names of structs directly referenced by a struct's members (array
-/// suffixes stripped, self-references excluded).
-fn direct_struct_deps<'def>(
-    struct_def: &'def EncodableStruct,
-    all_struct_names: &HashSet<String>,
-) -> Vec<&'def str> {
-    let mut deps = Vec::new();
-    for member in &struct_def.members {
-        let base = base_type_name(&member.encoded_type);
-        if base != struct_def.name && all_struct_names.contains(base) {
-            deps.push(base);
-        }
+    EncodableCollection {
+        encodables,
+        non_encodables: rejected,
     }
-    deps
 }
 
 /// Strips array suffixes from an encoded type to get its base name
@@ -450,80 +527,25 @@ fn base_type_name(encoded_type: &str) -> &str {
     }
 }
 
-/// Emits canonical strings for every encodable struct and parses them into
-/// [`Eip712TypeDef`]s (which re-validates the canonical-form invariant).
-fn canonicalize(
-    encodables: HashMap<String, EncodableStruct>,
-    all_struct_names: &HashSet<String>,
-    rejected: &mut HashMap<String, RejectReason>,
-) -> HashMap<String, Eip712TypeDef> {
-    let mut types = HashMap::new();
-    let mut parse_failures: Vec<(String, RejectReason)> = Vec::new();
-
-    for (name, struct_def) in &encodables {
-        let mut dependency_heads: Vec<String> =
-            transitive_struct_deps(struct_def, &encodables, all_struct_names)
-                .into_iter()
-                .filter_map(|dependency| encodables.get(&dependency).map(struct_head))
-                .collect();
-        dependency_heads.sort();
-
-        let mut canonical = struct_head(struct_def);
-        canonical.push_str(&dependency_heads.concat());
-
-        match Eip712TypeDef::parse(&canonical) {
-            Ok(type_def) => {
-                types.insert(name.clone(), type_def);
-            }
-            Err(error) => {
-                parse_failures.push((name.clone(), format!("failed to canonicalize: {error}")));
-            }
-        }
-    }
-
-    rejected.extend(parse_failures);
-    Eip712Collection { types, rejected }
-}
-
 /// The `Name(type member,…)` head of a single struct. Only called on encodable
 /// structs, whose members all have an encoded type.
 fn struct_head(struct_def: &EncodableStruct) -> String {
-    let members: Vec<String> = struct_def
-        .members
+    let EncodableStruct {
+        name,
+        members,
+        direct_struct_deps: _,
+    } = struct_def;
+
+    let members: Vec<String> = members
         .iter()
         .map(|member| {
-            let ty = member.encoded_type.as_str();
-            let name = &member.name;
-            format!("{ty} {name}")
+            let EncodableMember { name, encoded_type } = member;
+            format!("{encoded_type} {name}")
         })
         .collect();
-    let name = &struct_def.name;
+
     let body = members.join(",");
     format!("{name}({body})")
-}
-
-/// All structs transitively referenced by `root` (excluding `root` itself).
-fn transitive_struct_deps(
-    root: &EncodableStruct,
-    encodable: &HashMap<String, EncodableStruct>,
-    all_struct_names: &HashSet<String>,
-) -> Vec<String> {
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut stack = direct_struct_deps(root, all_struct_names);
-    while let Some(next) = stack.pop() {
-        if next == root.name || visited.contains(next) {
-            continue;
-        }
-
-        visited.insert(next.to_owned());
-        let dependency = encodable
-            .get(next)
-            .expect("all remaining dependencies should be encodable");
-
-        stack.extend(direct_struct_deps(dependency, all_struct_names));
-    }
-
-    visited.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -558,25 +580,28 @@ mod tests {
 
     /// Builds a compilation unit from in-memory sources (the first entry is the
     /// root) and collects EIP-712 types from it.
-    fn collect(sources: &[(&str, &str)]) -> Eip712Collection {
+    fn collect(sources: &[(&str, &str)]) -> Eip712TypeCollection {
         let (root, _) = sources.first().expect("at least one source");
-        let map = sources
+        let sources = sources
             .iter()
             .map(|(id, src)| ((*id).to_string(), (*src).to_string()))
             .collect();
+
         let mut builder =
-            CompilationBuilder::create(LanguageVersion::LATEST, InMemorySources { sources: map });
+            CompilationBuilder::create(LanguageVersion::LATEST, InMemorySources { sources });
+
         builder.add_file((*root).to_string());
+
         let unit = builder.build();
         collect_eip712_types_from_compilation_unit(&unit)
     }
 
-    /// Convenience: collect from a single root source.
-    fn collect_one(source: &str) -> Eip712Collection {
+    /// Convenience function to collect from a single root source.
+    fn collect_one(source: &str) -> Eip712TypeCollection {
         collect(&[("root.sol", source)])
     }
 
-    fn canonical<'a>(collection: &'a Eip712Collection, name: &str) -> &'a str {
+    fn get_canonical_type<'a>(collection: &'a Eip712TypeCollection, name: &str) -> &'a str {
         collection
             .get(name)
             .unwrap_or_else(|error| panic!("expected '{name}': {error}"))
@@ -591,11 +616,11 @@ mod tests {
              struct Mail { Person from; Person to; string contents; }",
         );
         assert_eq!(
-            canonical(&collection, "Mail"),
+            get_canonical_type(&collection, "Mail"),
             "Mail(Person from,Person to,string contents)Person(address wallet,string name)"
         );
         assert_eq!(
-            canonical(&collection, "Person"),
+            get_canonical_type(&collection, "Person"),
             "Person(address wallet,string name)"
         );
     }
@@ -609,7 +634,7 @@ mod tests {
         );
         // Asset sorts before Person regardless of member order.
         assert_eq!(
-            canonical(&collection, "Transaction"),
+            get_canonical_type(&collection, "Transaction"),
             "Transaction(Person from,Asset payload)\
              Asset(address token,uint256 amount)\
              Person(address wallet,string name)"
@@ -623,9 +648,13 @@ mod tests {
              struct B { C c; }
              struct A { B b; C c; }",
         );
-        assert_eq!(canonical(&collection, "A"), "A(B b,C c)B(C c)C(uint256 v)");
+        assert_eq!(
+            get_canonical_type(&collection, "A"),
+            "A(B b,C c)B(C c)C(uint256 v)"
+        );
     }
 
+    // TODO: LEFT OFF HERE
     #[test]
     fn self_recursive_struct_is_rejected() {
         // EIP-712's type system is acyclic: a struct that references itself
@@ -660,7 +689,7 @@ mod tests {
             "enum Color { Red, Green, Blue }
              struct S { Color color; }",
         );
-        assert_eq!(canonical(&collection, "S"), "S(uint8 color)");
+        assert_eq!(get_canonical_type(&collection, "S"), "S(uint8 color)");
     }
 
     #[test]
@@ -671,7 +700,10 @@ mod tests {
              library L {}
              struct S { C c; I i; }",
         );
-        assert_eq!(canonical(&collection, "S"), "S(address c,address i)");
+        assert_eq!(
+            get_canonical_type(&collection, "S"),
+            "S(address c,address i)"
+        );
     }
 
     #[test]
@@ -680,7 +712,7 @@ mod tests {
             "type USD is uint256;
              struct S { USD amount; }",
         );
-        assert_eq!(canonical(&collection, "S"), "S(uint256 amount)");
+        assert_eq!(get_canonical_type(&collection, "S"), "S(uint256 amount)");
     }
 
     #[test]
@@ -693,26 +725,29 @@ mod tests {
             ),
             ("udvt.sol", "type USD is uint128;"),
         ]);
-        assert_eq!(canonical(&collection, "S"), "S(uint128 amount)");
+        assert_eq!(get_canonical_type(&collection, "S"), "S(uint128 amount)");
     }
 
     #[test]
     fn address_payable_is_address() {
         let collection = collect_one("struct S { address payable recipient; }");
-        assert_eq!(canonical(&collection, "S"), "S(address recipient)");
+        assert_eq!(get_canonical_type(&collection, "S"), "S(address recipient)");
     }
 
     #[test]
     fn integer_aliases_are_normalized() {
         let collection = collect_one("struct S { uint a; int b; }");
-        assert_eq!(canonical(&collection, "S"), "S(uint256 a,int256 b)");
+        assert_eq!(
+            get_canonical_type(&collection, "S"),
+            "S(uint256 a,int256 b)"
+        );
     }
 
     #[test]
     fn byte_and_string_types() {
         let collection = collect_one("struct S { bytes data; string text; bytes17 fixed_bytes; }");
         assert_eq!(
-            canonical(&collection, "S"),
+            get_canonical_type(&collection, "S"),
             "S(bytes data,string text,bytes17 fixed_bytes)"
         );
     }
@@ -723,7 +758,7 @@ mod tests {
             "struct S { uint256[] dynamic; uint256[3] fixed_size; uint256[3][2] nested; }",
         );
         assert_eq!(
-            canonical(&collection, "S"),
+            get_canonical_type(&collection, "S"),
             "S(uint256[] dynamic,uint256[3] fixed_size,uint256[3][2] nested)"
         );
     }
@@ -735,7 +770,7 @@ mod tests {
              struct Group { Person[] members; }",
         );
         assert_eq!(
-            canonical(&collection, "Group"),
+            get_canonical_type(&collection, "Group"),
             "Group(Person[] members)Person(address wallet,string name)"
         );
     }
@@ -745,8 +780,11 @@ mod tests {
         let collection = collect_one("struct S { mapping(uint256 => uint256) balances; }");
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected { .. })
-        ));
+            Err(LookupError::Rejected {
+                reason: RejectReason::NonEncodableMembers { members },
+                ..
+            }
+        ) if members.iter().any(|member| member.contains("balances"))));
     }
 
     #[test]
@@ -761,7 +799,7 @@ mod tests {
         ));
         let outer = collection.get("Outer").unwrap_err();
         assert!(
-            matches!(&outer, LookupError::Rejected { reason, .. } if reason.contains("Inner")),
+            matches!(&outer, LookupError::Rejected { reason: RejectReason::NonEncodableMembers { members }, .. } if members.iter().any(|member| member.contains("Inner"))),
             "unexpected: {outer}"
         );
     }
@@ -771,7 +809,10 @@ mod tests {
         let collection = collect_one("struct S { function() external fn; }");
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected { .. })
+            Err(LookupError::Rejected {
+                reason: RejectReason::NonEncodableMembers { members },
+                ..
+            }) if members.iter().any(|member| member.contains("fn"))
         ));
     }
 
@@ -781,8 +822,14 @@ mod tests {
             "struct TopLevel { uint256 a; }
              contract C { struct Nested { uint256 b; } }",
         );
-        assert_eq!(canonical(&collection, "TopLevel"), "TopLevel(uint256 a)");
-        assert_eq!(canonical(&collection, "Nested"), "Nested(uint256 b)");
+        assert_eq!(
+            get_canonical_type(&collection, "TopLevel"),
+            "TopLevel(uint256 a)"
+        );
+        assert_eq!(
+            get_canonical_type(&collection, "Nested"),
+            "Nested(uint256 b)"
+        );
     }
 
     #[test]
@@ -795,7 +842,7 @@ mod tests {
             ),
             ("other.sol", "struct S { uint256 a; }"),
         ]);
-        assert_eq!(canonical(&collection, "S"), "S(uint256 a)");
+        assert_eq!(get_canonical_type(&collection, "S"), "S(uint256 a)");
     }
 
     #[test]
@@ -807,10 +854,10 @@ mod tests {
         );
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected { .. })
+            Err(LookupError::Rejected { reason: RejectReason::Duplicate { name, .. }, .. }) if name == "S"
         ));
         // An unrelated struct is still usable.
-        assert_eq!(canonical(&collection, "Ok"), "Ok(uint256 c)");
+        assert_eq!(get_canonical_type(&collection, "Ok"), "Ok(uint256 c)");
     }
 
     #[test]
@@ -822,7 +869,7 @@ mod tests {
         );
         let uses = collection.get("Uses").unwrap_err();
         assert!(
-            matches!(&uses, LookupError::Rejected { reason, .. } if reason.contains('S')),
+            matches!(&uses, LookupError::Rejected { reason: RejectReason::Duplicate { name, .. }, .. } if name == "S"),
             "unexpected: {uses}"
         );
     }
@@ -842,7 +889,7 @@ mod tests {
         ]);
         // The dependency is encoded under its definition name, not the alias.
         assert_eq!(
-            canonical(&collection, "Wallet"),
+            get_canonical_type(&collection, "Wallet"),
             "Wallet(Person owner)Person(address addr,string handle)"
         );
     }

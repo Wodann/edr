@@ -2,16 +2,39 @@
 //! definitions from Solidity sources.
 
 mod collector;
+pub mod parse;
 mod provider;
 mod resolver;
-mod types;
 
 pub use crate::{
     collector::{
         collect_eip712_types_for_file, collect_eip712_types_from_compilation_unit, CollectError,
-        Eip712Collection, LookupError,
+        Eip712TypeCollection, LookupError,
     },
     provider::{CachedEip712Provider, Eip712Root, SharedEip712Provider},
     resolver::ImportResolver,
-    types::{Eip712Error, Eip712TypeDef},
 };
+
+/// An EIP-712 type definition in canonical form, paired with its
+/// primary-type name.
+///
+/// Only [`Eip712TypeDef::parse`] can construct one, which guarantees the
+/// canonical-form invariant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Eip712Type {
+    name: String,
+    canonical_definition: String,
+}
+
+impl Eip712Type {
+    /// Primary type name (the leftmost type in the canonical definition).
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Canonical EIP-712 type definition, as produced by
+    /// [`EncodeType::canonicalize`].
+    pub fn canonical_definition(&self) -> &str {
+        &self.canonical_definition
+    }
+}

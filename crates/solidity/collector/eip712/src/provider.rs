@@ -20,8 +20,8 @@ use rayon::prelude::*;
 use semver::Version;
 
 use crate::{
-    collect_eip712_types_for_file, resolver::ImportResolver, CollectError, Eip712Collection,
-    Eip712TypeDef, LookupError,
+    collect_eip712_types_for_file, resolver::ImportResolver, CollectError, Eip712Type,
+    Eip712TypeCollection, LookupError,
 };
 
 /// A Solidity source file to collect EIP-712 canonical types from.
@@ -46,7 +46,7 @@ pub struct Eip712Root {
 /// no types.
 #[derive(Clone, Debug, Default)]
 pub struct CachedEip712Provider {
-    by_source: HashMap<PathBuf, Eip712Collection>,
+    by_source: HashMap<PathBuf, Eip712TypeCollection>,
 }
 
 impl CachedEip712Provider {
@@ -80,7 +80,7 @@ impl CachedEip712Provider {
     }
 
     /// Looks up a canonical type by name within the scope of `source`.
-    pub fn get(&self, source: &Path, type_name: &str) -> Result<Eip712TypeDef, String> {
+    pub fn get(&self, source: &Path, type_name: &str) -> Result<Eip712Type, String> {
         match self.by_source.get(source) {
             Some(Ok(collection)) => collection
                 .get(type_name)
@@ -114,7 +114,7 @@ pub enum AsyncEip712Error {
 pub struct Eip712TypeRequest {
     source: PathBuf,
     type_name: String,
-    response_sender: crossbeam_channel::Sender<Result<Eip712TypeDef, AsyncEip712Error>>,
+    response_sender: crossbeam_channel::Sender<Result<Eip712Type, AsyncEip712Error>>,
 }
 
 /// A cloneable, `Send + Sync` handle that collects EIP-712 types in the
@@ -156,7 +156,7 @@ impl SharedEip712Provider {
         &self,
         source: &Path,
         type_name: &str,
-    ) -> Result<Eip712TypeDef, AsyncEip712Error> {
+    ) -> Result<Eip712Type, AsyncEip712Error> {
         let (sender, receiver) = crossbeam_channel::bounded(1);
         let request = Eip712TypeRequest {
             source: source.to_path_buf(),

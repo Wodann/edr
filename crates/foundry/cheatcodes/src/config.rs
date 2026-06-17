@@ -8,7 +8,7 @@ use std::{
 use alloy_primitives::{map::AddressHashMap, U256};
 use edr_artifact::ArtifactId;
 use edr_common::fs::normalize_path;
-use edr_solidity_collector_eip712::{Eip712TypeDef, SharedEip712TypeProvider};
+use edr_solidity_collector_eip712::{Eip712Type, SharedEip712TypeProvider};
 use foundry_compilers::utils::canonicalize;
 use foundry_evm_core::{contracts::ContractsByArtifact, evm_context::HardforkTr, opts::EvmOpts};
 
@@ -154,7 +154,7 @@ impl SuiteEip712TypeProvider {
     /// Note: this reads project sources from disk the same way the compiler
     /// does — driven by the test runner, not by user-controlled paths — and so
     /// intentionally does not go through `fs_permissions`.
-    pub fn type_def(&self, name: &str) -> Result<Eip712TypeDef> {
+    pub fn type_def(&self, name: &str) -> Result<Eip712Type> {
         let artifact = self
             .running_artifact
             .as_ref()

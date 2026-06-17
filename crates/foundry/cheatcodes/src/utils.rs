@@ -4,7 +4,7 @@ use alloy_dyn_abi::{DynSolType, DynSolValue, Resolver, TypedData};
 use alloy_ens::namehash;
 use alloy_primitives::{aliases::B32, keccak256, map::HashMap, Bytes, B64, U256};
 use alloy_sol_types::SolValue;
-use edr_solidity_collector_eip712::Eip712TypeDef;
+use edr_solidity_collector_eip712::Eip712Type;
 use foundry_evm_core::{
     backend::CheatcodeBackend,
     constants::DEFAULT_CREATE2_DEPLOYER,
@@ -1285,9 +1285,9 @@ fn random_int<
 fn get_canonical_type_def(
     name_or_def: &str,
     eip712_provider: &SuiteEip712TypeProvider,
-) -> Result<Eip712TypeDef> {
+) -> Result<Eip712Type> {
     if name_or_def.contains('(') {
-        Eip712TypeDef::parse(name_or_def).map_err(|error| fmt_err!("{error}"))
+        Eip712Type::parse(name_or_def).map_err(|error| fmt_err!("{error}"))
     } else {
         eip712_provider.type_def(name_or_def)
     }
@@ -1295,7 +1295,7 @@ fn get_canonical_type_def(
 
 /// Returns the EIP-712 struct hash for provided name, definition and ABI
 /// encoded data.
-fn get_struct_hash(type_def: &Eip712TypeDef, abi_encoded_data: &Bytes) -> Result {
+fn get_struct_hash(type_def: &Eip712Type, abi_encoded_data: &Bytes) -> Result {
     let mut resolver = Resolver::default();
 
     // Populate the resolver by ingesting the canonical type definition, and then
