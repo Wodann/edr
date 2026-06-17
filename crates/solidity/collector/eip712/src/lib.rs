@@ -7,10 +7,7 @@ mod provider;
 mod resolver;
 
 pub use crate::{
-    collector::{
-        collect_eip712_types_for_file, collect_eip712_types_from_compilation_unit, CollectError,
-        Eip712TypeCollection, LookupError,
-    },
+    collector::CollectError,
     provider::{CachedEip712Provider, Eip712Root, SharedEip712Provider},
     resolver::ImportResolver,
 };

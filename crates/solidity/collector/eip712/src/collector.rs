@@ -91,35 +91,43 @@ pub struct Eip712TypeCollection {
     rejected: HashMap<String, RejectReason>,
 }
 
+/// An error type for a struct that exists but could not be converted to an
+/// EIP-712 canonical type.
+#[derive(Debug, thiserror::Error)]
+#[error("EIP-712 type '{name}' cannot be used: {reason}")]
+pub struct Eip712TypeRejected {
+    /// The requested type name.
+    pub name: String,
+    /// Why the type was rejected.
+    pub reason: RejectReason,
+}
+
 /// Why a [`Eip712Collection::get`] lookup did not return a type.
 #[derive(Debug, thiserror::Error)]
-pub enum LookupError {
+pub(crate) enum Eip712CollectionLookupError {
     /// No struct with this name exists in the compilation unit.
-    #[error("EIP-712 type '{0}' not found in the test contract's sources")]
-    NotFound(String),
-
+    #[error("EIP-712 type '{type_name}' was not found.")]
+    NotFound { type_name: String },
     /// A struct with this name exists but cannot be used as an EIP-712 type.
-    #[error("EIP-712 type '{name}' cannot be used: {reason}")]
-    Rejected {
-        /// The requested type name.
-        name: String,
-        /// Why the type was rejected.
-        reason: RejectReason,
-    },
+    #[error(transparent)]
+    Rejected(#[from] Eip712TypeRejected),
 }
 
 impl Eip712TypeCollection {
-    /// Looks up a canonical type definition by primary type name.
-    pub fn get(&self, name: &str) -> Result<&Eip712Type, LookupError> {
+    /// Looks up a canonical type definition by its primary type name.
+    pub fn get(&self, name: &str) -> Result<&Eip712Type, Eip712CollectionLookupError> {
         if let Some(def) = self.types.get(name) {
             Ok(def)
         } else if let Some(reason) = self.rejected.get(name) {
-            Err(LookupError::Rejected {
+            Err(Eip712TypeRejected {
                 name: name.to_owned(),
                 reason: reason.clone(),
-            })
+            }
+            .into())
         } else {
-            Err(LookupError::NotFound(name.to_owned()))
+            Err(Eip712CollectionLookupError::NotFound {
+                type_name: name.to_owned(),
+            })
         }
     }
 
@@ -661,7 +669,10 @@ mod tests {
         // has no finite type hash, so canonicalization rejects it.
         let collection = collect_one("struct Node { uint256 value; Node[] children; }");
         assert!(
-            matches!(collection.get("Node"), Err(LookupError::Rejected { .. })),
+            matches!(
+                collection.get("Node"),
+                Err(Eip712CollectionLookupError::Rejected { .. })
+            ),
             "recursive struct should be rejected"
         );
     }
@@ -675,11 +686,11 @@ mod tests {
         );
         assert!(matches!(
             collection.get("A"),
-            Err(LookupError::Rejected { .. })
+            Err(Eip712CollectionLookupError::Rejected { .. })
         ));
         assert!(matches!(
             collection.get("B"),
-            Err(LookupError::Rejected { .. })
+            Err(Eip712CollectionLookupError::Rejected { .. })
         ));
     }
 
@@ -780,10 +791,10 @@ mod tests {
         let collection = collect_one("struct S { mapping(uint256 => uint256) balances; }");
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected {
+            Err(Eip712CollectionLookupError::Rejected(Eip712TypeRejected {
                 reason: RejectReason::NonEncodableMembers { members },
                 ..
-            }
+            })
         ) if members.iter().any(|member| member.contains("balances"))));
     }
 
@@ -795,11 +806,16 @@ mod tests {
         );
         assert!(matches!(
             collection.get("Inner"),
-            Err(LookupError::Rejected { .. })
+            Err(Eip712CollectionLookupError::Rejected { .. })
         ));
         let outer = collection.get("Outer").unwrap_err();
         assert!(
-            matches!(&outer, LookupError::Rejected { reason: RejectReason::NonEncodableMembers { members }, .. } if members.iter().any(|member| member.contains("Inner"))),
+            matches!(
+                &outer,
+                Eip712CollectionLookupError::Rejected(
+                    Eip712TypeRejected { reason: RejectReason::NonEncodableMembers { members }, .. } ,
+                ) if members.iter().any(|member| member.contains("Inner"))
+            ),
             "unexpected: {outer}"
         );
     }
@@ -809,10 +825,10 @@ mod tests {
         let collection = collect_one("struct S { function() external fn; }");
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected {
+            Err(Eip712CollectionLookupError::Rejected(Eip712TypeRejected {
                 reason: RejectReason::NonEncodableMembers { members },
                 ..
-            }) if members.iter().any(|member| member.contains("fn"))
+            })) if members.iter().any(|member| member.contains("fn"))
         ));
     }
 
@@ -854,7 +870,7 @@ mod tests {
         );
         assert!(matches!(
             collection.get("S"),
-            Err(LookupError::Rejected { reason: RejectReason::Duplicate { name, .. }, .. }) if name == "S"
+            Err(Eip712CollectionLookupError::Rejected(Eip712TypeRejected { reason: RejectReason::Duplicate { name, .. }, .. })) if name == "S"
         ));
         // An unrelated struct is still usable.
         assert_eq!(get_canonical_type(&collection, "Ok"), "Ok(uint256 c)");
@@ -869,7 +885,7 @@ mod tests {
         );
         let uses = collection.get("Uses").unwrap_err();
         assert!(
-            matches!(&uses, LookupError::Rejected { reason: RejectReason::Duplicate { name, .. }, .. } if name == "S"),
+            matches!(&uses, Eip712CollectionLookupError::Rejected(Eip712TypeRejected { reason: RejectReason::Duplicate { name, .. }, .. }) if name == "S"),
             "unexpected: {uses}"
         );
     }
@@ -899,7 +915,7 @@ mod tests {
         let collection = collect_one("struct S { uint256 a; }");
         assert!(matches!(
             collection.get("DoesNotExist"),
-            Err(LookupError::NotFound(_))
+            Err(Eip712CollectionLookupError::NotFound { type_name }) if type_name == "DoesNotExist"
         ));
     }
 

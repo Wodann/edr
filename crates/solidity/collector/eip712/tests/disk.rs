@@ -5,7 +5,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use edr_solidity_collector_eip712::{
-    collect_eip712_types_for_file, CollectError, ImportResolver, LookupError,
+    collect_eip712_types_for_file, CollectError, CollectionLookupError, ImportResolver,
 };
 use semver::Version;
 
@@ -69,7 +69,7 @@ fn unmapped_import_leaves_dependency_unresolved_but_unit_builds() {
 
     assert!(matches!(
         collection.get("Token"),
-        Err(LookupError::NotFound(_))
+        Err(CollectionLookupError::NotFound(_))
     ));
 }
 
