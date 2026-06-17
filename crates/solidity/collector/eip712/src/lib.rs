@@ -11,7 +11,7 @@ pub use crate::{
         collect_eip712_types_for_file, collect_eip712_types_from_compilation_unit, CollectError,
         Eip712Collection, LookupError,
     },
-    provider::{AsyncEip712Provider, CachedEip712Provider, Eip712Root},
+    provider::{CachedEip712Provider, Eip712Root, SharedEip712Provider},
     resolver::ImportResolver,
     types::{Eip712Error, Eip712TypeDef},
 };

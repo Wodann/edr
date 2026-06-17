@@ -121,12 +121,12 @@ pub struct Eip712TypeRequest {
 /// background, parallelizing the per-root parses (via [`rayon`]). Queries block
 /// until collection has finished.
 #[derive(Clone, Debug)]
-pub struct AsyncEip712Provider {
+pub struct SharedEip712Provider {
     request_sender: mpsc::Sender<Eip712TypeRequest>,
     backend: Arc<AsyncEip712ProviderBackend>,
 }
 
-impl AsyncEip712Provider {
+impl SharedEip712Provider {
     /// Spawns a background thread that collects every root in parallel and then
     /// makes the resulting [`Eip712Provider`] available to queries.
     pub fn new(roots: Vec<Eip712Root>, import_resolver: ImportResolver) -> Self {
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn async_provider_collects_all_roots_then_serves() {
-        let provider = AsyncEip712Provider::new(
+        let provider = SharedEip712Provider::new(
             vec![root("relative/Root.sol"), root("relative/Dep.sol")],
             ImportResolver::default(),
         );
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn async_provider_blocks_concurrent_queries_until_ready() {
-        let provider = Arc::new(AsyncEip712Provider::new(
+        let provider = Arc::new(SharedEip712Provider::new(
             vec![root("relative/Root.sol")],
             ImportResolver::default(),
         ));

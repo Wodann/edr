@@ -8,7 +8,7 @@
 //! implementation and `forge bind-json`.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map, HashMap, HashSet},
     path::Path,
 };
 
@@ -136,9 +136,13 @@ pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip
     let collected = collect_structs(unit);
     let all_struct_names: HashSet<String> = collected.iter().map(|s| s.name.clone()).collect();
 
-    let (by_name, mut rejected) = index_by_name(collected);
-    mark_non_encodable(&by_name, &all_struct_names, &mut rejected);
-    emit(&by_name, &all_struct_names, rejected)
+    let DedupedCollection {
+        unique,
+        duplicates: mut rejected,
+    } = dedup_by_name(collected);
+
+    let encodable = reject_non_encodable(unique, &all_struct_names, &mut rejected);
+    canonicalize(encodable, &all_struct_names, rejected)
 }
 
 /// Maps a solc [`Version`] to a Slang [`LanguageVersion`]; clamping versions
@@ -165,10 +169,17 @@ fn to_language_version(solc_version: &Version) -> Result<LanguageVersion, FromSe
 
 /// A struct definition collected from the AST, with each member's type already
 /// encoded to its EIP-712 form (`None` if the member is not encodable).
+#[derive(Clone)]
 struct CollectedStruct {
     name: String,
     file_id: String,
     members: Vec<CollectedMember>,
+}
+
+struct EncodableStruct {
+    name: String,
+    file_id: String,
+    members: Vec<EncodableMember>,
 }
 
 struct CollectedMember {
@@ -176,6 +187,43 @@ struct CollectedMember {
     /// EIP-712 encoded member type, or `None` if not encodable (mapping,
     /// function, fixed-point, unresolved, …).
     encoded_type: Option<String>,
+}
+
+struct EncodableMember {
+    name: String,
+    encoded_type: String,
+}
+
+impl TryFrom<CollectedStruct> for EncodableStruct {
+    type Error = RejectReason;
+
+    fn try_from(value: CollectedStruct) -> Result<Self, Self::Error> {
+        let mut members = Vec::new();
+        let mut non_encodable_members = Vec::new();
+
+        for member in value.members {
+            if let Some(encoded_type) = member.encoded_type {
+                members.push(EncodableMember {
+                    name: member.name,
+                    encoded_type,
+                });
+            } else {
+                non_encodable_members.push(member.name);
+            }
+        }
+
+        if !non_encodable_members.is_empty() {
+            return Err(RejectReason::NonEncodableMembers {
+                members: non_encodable_members,
+            });
+        }
+
+        Ok(EncodableStruct {
+            name: value.name,
+            file_id: value.file_id,
+            members,
+        })
+    }
 }
 
 /// Walks every struct definition in the unit and encodes its members.
@@ -253,74 +301,66 @@ fn encode_member_type(ty: &Type) -> Option<String> {
 #[derive(Debug, thiserror::Error)]
 pub enum RejectReason {
     #[error("Conflicting definitions of struct '{name}' in: {}", .file_ids.join(", "))]
-    DuplicateName { name: String, file_ids: Vec<String> },
+    Duplicate { name: String, file_ids: Vec<String> },
+    #[error("Struct has non-encodable {}: '{}'", if .members.len() == 1 { "member" } else { "members" }, .members.join(", "))]
+    NonEncodableMembers { members: Vec<String> },
 }
 
-/// Indexes collected structs by name. Identical definitions (same fingerprint)
-/// dedupe silently; conflicting same-name definitions are removed and recorded
-/// as rejected.
-fn index_by_name(
-    collected: Vec<CollectedStruct>,
-) -> (
-    HashMap<String, CollectedStruct>,
-    HashMap<String, RejectReason>,
-) {
-    let mut by_name: HashMap<String, CollectedStruct> = HashMap::new();
-    let mut fingerprints: HashMap<String, String> = HashMap::new();
-    let mut rejected: HashMap<String, RejectReason> = HashMap::new();
+pub struct DedupedCollection {
+    pub unique: HashMap<String, CollectedStruct>,
+    pub duplicates: HashMap<String, RejectReason>,
+}
 
+/// Deduplicates structs with the same name but different definitions; rejects
+/// all of them as unusable.
+fn dedup_by_name(collected: Vec<CollectedStruct>) -> DedupedCollection {
+    struct FileIdAndFingerprint {
+        pub file_id: String,
+        pub fingerprint: String,
+    }
+
+    let mut by_name: HashMap<String, Vec<CollectedStruct>> = HashMap::new();
     for struct_def in collected {
-        if rejected.contains_key(&struct_def.name) {
-            continue;
-        }
+        by_name
+            .entry(struct_def.name.clone())
+            .and_modify(|defs| defs.push(struct_def.clone()))
+            .or_insert(vec![struct_def]);
+    }
 
-        let fingerprint = encode_struct(&struct_def);
-        match fingerprints.get(&struct_def.name) {
-            None => {
-                fingerprints.insert(struct_def.name.clone(), fingerprint);
-                by_name.insert(struct_def.name.clone(), struct_def);
-            }
-            // Identical re-definition (e.g. the same struct seen via two
-            // imports): keep one, no error.
-            Some(existing) if *existing == fingerprint => {}
-            // Same name, different body: ambiguous so drop from `by_name` and reject both.
-            Some(existing) => {
-                let reject_entry = rejected.entry(struct_def.name.clone());
+    let mut unique: HashMap<String, CollectedStruct> = HashMap::new();
+    let mut duplicates: HashMap<String, RejectReason> = HashMap::new();
+    for (struct_name, struct_defs) in by_name {
+        let mut iter = struct_defs.iter();
 
-                if let Some(first_file) = by_name
-                    .remove(&struct_def.name)
-                    .map(|s| s.file_id) {
-                        // Since we found a first file, we know the reject reason cannot be `DuplicateName`. Other existing reject reasons take precedence.
-                        reject_entry.or_insert(RejectReason::DuplicateName { name: struct_def.name.clone(), file_ids: vec![first_file, struct_def.file_id] });
-                    } else {
+        let next = iter
+            .next()
+            .expect("at least one struct definition must exist for this name");
+        let first_struct_def = next.clone();
+        let fingerprint = make_fingerprint(&next);
 
-                    }
-
-                rejected.entry(struct_def.name.clone()).and_modify(|reason| match reason {
-                    RejectReason::DuplicateName { name: _name, file_ids } => {
-                        file_ids.push(struct_def.file_id);
-                    }
-                }).or_insert(RejectReason::DuplicateName { name: struct_def.name, file_ids: vec![] });
-
-                rejected.insert(
-                    struct_def.name.clone(),
-                    RejectReason::DuplicateName { name: struct_def.name, file_ids: () }
-                    format!(
-                        "conflicting definitions of struct '{}' in {} and {}",
-                        struct_def.name, first_file, struct_def.file_id
-                    ),
-                );
-            }
+        // If fingerprints match, keep one definition and ignore the rest; otherwise,
+        // reject all definitions for this name as unusable.
+        if iter.all(|def| make_fingerprint(&def) == fingerprint) {
+            unique.insert(struct_name, first_struct_def);
+        } else {
+            let file_ids = struct_defs.into_iter().map(|def| def.file_id).collect();
+            duplicates.insert(
+                struct_name.clone(),
+                RejectReason::Duplicate {
+                    name: struct_name,
+                    file_ids,
+                },
+            );
         }
     }
 
-    (by_name, rejected)
+    DedupedCollection { unique, duplicates }
 }
 
-/// Encodes the type of a struct A deterministic fingerprint of a struct's name
-/// and members (including non-encodable members as `<unsupported>`), used to
-/// tell identical re-definitions apart from genuine conflicts.
-fn encode_struct(struct_def: &CollectedStruct) -> String {
+/// A deterministic fingerprint of a struct's name and members (including
+/// non-encodable members as `<unsupported>`), used to tell identical
+/// re-definitions apart from genuine conflicts.
+fn make_fingerprint(struct_def: &CollectedStruct) -> String {
     let members: Vec<String> = struct_def
         .members
         .iter()
@@ -336,74 +376,66 @@ fn encode_struct(struct_def: &CollectedStruct) -> String {
     format!("{name}({body})")
 }
 
-/// Records, in `rejected`, every struct that cannot be EIP-712 encoded: those
-/// with a non-encodable member, then (by fixed point) those that depend on a
-/// rejected or non-encodable struct.
-fn mark_non_encodable(
-    by_name: &HashMap<String, CollectedStruct>,
+/// Rejects structs with non-encodable members, and any struct that depends on
+/// them transitively.
+fn reject_non_encodable(
+    collected: HashMap<String, CollectedStruct>,
     all_struct_names: &HashSet<String>,
-    rejected: &mut HashMap<String, String>,
-) {
-    // Seed: structs with a directly non-encodable member.
-    for (name, struct_def) in by_name {
-        if rejected.contains_key(name) {
-            continue;
-        }
-        if let Some(bad) = struct_def.members.iter().find(|m| m.encoded_type.is_none()) {
-            let member = &bad.name;
-            rejected.insert(
-                name.clone(),
-                format!("member '{member}' has a type that is not EIP-712 encodable"),
-            );
+    rejected: &mut HashMap<String, RejectReason>,
+) -> HashMap<String, EncodableStruct> {
+    let mut encodables = HashMap::new();
+    let mut non_encodables = HashMap::new();
+
+    for (name, struct_def) in collected {
+        match EncodableStruct::try_from(struct_def) {
+            Ok(encodable) => {
+                encodables.insert(name, encodable);
+            }
+            Err(reason) => {
+                non_encodables.insert(name, reason);
+            }
         }
     }
 
-    // Propagate: a struct depending on a rejected/unusable struct is itself
-    // unusable. Iterate to a fixed point.
-    loop {
-        let mut newly_rejected: Vec<(String, String)> = Vec::new();
-        for (name, struct_def) in by_name {
-            if rejected.contains_key(name) {
-                continue;
-            }
-            for dependency in direct_struct_deps(struct_def, all_struct_names) {
-                let reason = if rejected.contains_key(&dependency) {
-                    Some(format!("depends on non-encodable struct '{dependency}'"))
-                } else if !by_name.contains_key(&dependency) {
-                    // A known struct name that isn't usable (it was dropped as
-                    // a conflict but the conflict reason lives under its name).
-                    Some(format!("depends on ambiguous struct '{dependency}'"))
-                } else {
-                    None
-                };
-                if let Some(reason) = reason {
-                    newly_rejected.push((name.clone(), reason));
-                    break;
-                }
-            }
+    while !non_encodables.is_empty() {
+        for name in non_encodables.keys() {
+            encodables.remove(name);
         }
 
-        if newly_rejected.is_empty() {
-            break;
+        // Take `non_encodables` so it's reset for the next iteration
+        rejected.extend(std::mem::take(&mut non_encodables));
+
+        for (name, struct_def) in &encodables {
+            let non_encodable_members = direct_struct_deps(&struct_def, all_struct_names)
+                .into_iter()
+                .filter(|dependency| rejected.contains_key(*dependency))
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            if !non_encodable_members.is_empty() {
+                non_encodables.insert(
+                    name.clone(),
+                    RejectReason::NonEncodableMembers {
+                        members: non_encodable_members,
+                    },
+                );
+            }
         }
-        rejected.extend(newly_rejected);
     }
+
+    encodables
 }
 
 /// The names of structs directly referenced by a struct's members (array
 /// suffixes stripped, self-references excluded).
-fn direct_struct_deps(
-    struct_def: &CollectedStruct,
+fn direct_struct_deps<'def>(
+    struct_def: &'def EncodableStruct,
     all_struct_names: &HashSet<String>,
-) -> Vec<String> {
+) -> Vec<&'def str> {
     let mut deps = Vec::new();
     for member in &struct_def.members {
-        let Some(encoded) = &member.encoded_type else {
-            continue;
-        };
-        let base = base_type_name(encoded);
+        let base = base_type_name(&member.encoded_type);
         if base != struct_def.name && all_struct_names.contains(base) {
-            deps.push(base.to_string());
+            deps.push(base);
         }
     }
     deps
@@ -420,23 +452,19 @@ fn base_type_name(encoded_type: &str) -> &str {
 
 /// Emits canonical strings for every encodable struct and parses them into
 /// [`Eip712TypeDef`]s (which re-validates the canonical-form invariant).
-fn emit(
-    by_name: &HashMap<String, CollectedStruct>,
+fn canonicalize(
+    encodables: HashMap<String, EncodableStruct>,
     all_struct_names: &HashSet<String>,
-    mut rejected: HashMap<String, String>,
-) -> Eip712Collection {
+    rejected: &mut HashMap<String, RejectReason>,
+) -> HashMap<String, Eip712TypeDef> {
     let mut types = HashMap::new();
-    let mut parse_failures: Vec<(String, String)> = Vec::new();
+    let mut parse_failures: Vec<(String, RejectReason)> = Vec::new();
 
-    for (name, struct_def) in by_name {
-        if rejected.contains_key(name) {
-            continue;
-        }
-
+    for (name, struct_def) in &encodables {
         let mut dependency_heads: Vec<String> =
-            transitive_struct_deps(struct_def, by_name, all_struct_names)
+            transitive_struct_deps(struct_def, &encodables, all_struct_names)
                 .into_iter()
-                .filter_map(|dependency| by_name.get(&dependency).map(struct_head))
+                .filter_map(|dependency| encodables.get(&dependency).map(struct_head))
                 .collect();
         dependency_heads.sort();
 
@@ -459,12 +487,12 @@ fn emit(
 
 /// The `Name(type member,…)` head of a single struct. Only called on encodable
 /// structs, whose members all have an encoded type.
-fn struct_head(struct_def: &CollectedStruct) -> String {
+fn struct_head(struct_def: &EncodableStruct) -> String {
     let members: Vec<String> = struct_def
         .members
         .iter()
         .map(|member| {
-            let ty = member.encoded_type.as_deref().unwrap_or_default();
+            let ty = member.encoded_type.as_str();
             let name = &member.name;
             format!("{ty} {name}")
         })
@@ -476,21 +504,25 @@ fn struct_head(struct_def: &CollectedStruct) -> String {
 
 /// All structs transitively referenced by `root` (excluding `root` itself).
 fn transitive_struct_deps(
-    root: &CollectedStruct,
-    by_name: &HashMap<String, CollectedStruct>,
+    root: &EncodableStruct,
+    encodable: &HashMap<String, EncodableStruct>,
     all_struct_names: &HashSet<String>,
 ) -> Vec<String> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut stack = direct_struct_deps(root, all_struct_names);
     while let Some(next) = stack.pop() {
-        if next == root.name || visited.contains(&next) {
+        if next == root.name || visited.contains(next) {
             continue;
         }
-        visited.insert(next.clone());
-        if let Some(dependency) = by_name.get(&next) {
-            stack.extend(direct_struct_deps(dependency, all_struct_names));
-        }
+
+        visited.insert(next.to_owned());
+        let dependency = encodable
+            .get(next)
+            .expect("all remaining dependencies should be encodable");
+
+        stack.extend(direct_struct_deps(dependency, all_struct_names));
     }
+
     visited.into_iter().collect()
 }
 
