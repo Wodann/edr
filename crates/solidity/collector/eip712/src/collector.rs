@@ -64,7 +64,17 @@ impl Eip712Type {
             Ok(visited.into_iter().collect())
         }
 
-        let mut dependency_heads = transitive_struct_deps(root, encodables)?;
+        let dependency_names = transitive_struct_deps(root, encodables)?;
+        let mut dependency_heads = dependency_names
+            .iter()
+            .map(|dependency| {
+                let dependency = encodables.get(dependency).ok_or(MissingStructDependency {
+                    name: root.name.clone(),
+                    dependency: dependency.clone(),
+                })?;
+                Ok(struct_head(dependency))
+            })
+            .collect::<Result<Vec<_>, MissingStructDependency>>()?;
         dependency_heads.sort();
 
         let name = root.name.clone();
