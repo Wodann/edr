@@ -188,7 +188,7 @@ impl Clone for CollectError {
 /// hard error.
 pub fn collect_eip712_types_for_file(
     root_source: &Path,
-    solc_version: &Version,
+    solc_version: Version,
     import_resolver: &ImportResolver,
 ) -> Result<Eip712TypeCollection, CollectError> {
     let language_version = to_language_version(solc_version)?;
@@ -220,10 +220,8 @@ pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip
 
     let EncodableCollection {
         encodables,
-        non_encodables,
-    } = reject_non_encodable(unique);
-
-    let rejected = duplicates.into_iter().chain(non_encodables).collect();
+        rejected,
+    } = reject_non_encodable(unique, duplicates);
 
     let types = encodables
         .iter()
@@ -240,23 +238,14 @@ pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip
 
 /// Maps a solc [`Version`] to a Slang [`LanguageVersion`]; clamping versions
 /// newer than Slang supports down to its latest grammar.
-fn to_language_version(solc_version: &Version) -> Result<LanguageVersion, FromSemverError> {
-    // Strip pre-release/build metadata: `try_from` rejects it, but a solc
-    // version like `0.8.24+commit.abcdef` should still map to 0.8.24.
-    let stripped = Version::new(solc_version.major, solc_version.minor, solc_version.patch);
-    match LanguageVersion::try_from(stripped) {
-        Ok(version) => Ok(version),
-        Err(FromSemverError::UnsupportedVersion) => {
-            // try_from only fails for versions outside [0.8.0, LATEST]. Clamp anything
-            // newer to LATEST; reject anything older (no <0.8 grammar in Slang v2).
-            let latest: Version = LanguageVersion::LATEST.into();
-            if *solc_version > latest {
-                Ok(LanguageVersion::LATEST)
-            } else {
-                Err(FromSemverError::UnsupportedVersion)
-            }
-        }
-        other => other,
+fn to_language_version(solc_version: Version) -> Result<LanguageVersion, FromSemverError> {
+    // Fall back to the latest Slang grammar for any solc version newer than what
+    // Slang supports.
+    let latest: Version = LanguageVersion::LATEST.into();
+    if solc_version > latest {
+        Ok(LanguageVersion::LATEST)
+    } else {
+        LanguageVersion::try_from(solc_version)
     }
 }
 
@@ -480,15 +469,28 @@ fn make_fingerprint(struct_def: &CollectedStruct) -> String {
 /// structs and why they were rejected.
 struct EncodableCollection {
     pub encodables: HashMap<String, EncodableStruct>,
-    pub non_encodables: HashMap<String, RejectReason>,
+    pub rejected: HashMap<String, RejectReason>,
 }
 
 /// Rejects structs that (transitively) reference non-encodable structs.
-fn reject_non_encodable(collected: HashMap<String, CollectedStruct>) -> EncodableCollection {
+fn reject_non_encodable(
+    collected: HashMap<String, CollectedStruct>,
+    previously_rejected: HashMap<String, RejectReason>,
+) -> EncodableCollection {
     let mut encodables = HashMap::new();
-    let mut newly_rejected = HashMap::new();
 
-    let struct_names: HashSet<String> = collected.keys().cloned().collect();
+    // Every struct name in the unit, including those already rejected (e.g. as
+    // duplicates): a member referencing such a struct is still a struct
+    // dependency, so the dependent must be rejected alongside it.
+    let struct_names: HashSet<String> = collected
+        .keys()
+        .cloned()
+        .chain(previously_rejected.keys().cloned())
+        .collect();
+
+    // Combine the previously and newly rejected structs so we can propagate
+    // non-encodability to dependents.
+    let mut newly_rejected = previously_rejected;
 
     for (name, struct_def) in collected {
         match EncodableStruct::new(struct_def, |struct_name| struct_names.contains(struct_name)) {
@@ -516,7 +518,7 @@ fn reject_non_encodable(collected: HashMap<String, CollectedStruct>) -> Encodabl
             let non_encodable_members = encodable
                 .direct_struct_deps
                 .iter()
-                .filter(|dependency| rejected.contains_key(*dependency))
+                .filter(|dependency| !encodables.contains_key(*dependency))
                 .map(ToOwned::to_owned)
                 .collect::<Vec<_>>();
 
@@ -533,7 +535,7 @@ fn reject_non_encodable(collected: HashMap<String, CollectedStruct>) -> Encodabl
 
     EncodableCollection {
         encodables,
-        non_encodables: rejected,
+        rejected,
     }
 }
 
@@ -673,36 +675,29 @@ mod tests {
         );
     }
 
-    // TODO: LEFT OFF HERE
     #[test]
-    fn self_recursive_struct_is_rejected() {
-        // EIP-712's type system is acyclic: a struct that references itself
-        // has no finite type hash, so canonicalization rejects it.
+    fn self_recursive_struct_is_supported() {
+        // EIP-712 explicitly supports recursive struct types. The primary type
+        // is excluded from its own referenced-type set, so a self-reference
+        // adds no extra dependency head and the canonical form is just the
+        // struct head.
         let collection = collect_one("struct Node { uint256 value; Node[] children; }");
-        assert!(
-            matches!(
-                collection.get("Node"),
-                Err(Eip712CollectionLookupError::Rejected { .. })
-            ),
-            "recursive struct should be rejected"
+        assert_eq!(
+            get_canonical_type(&collection, "Node"),
+            "Node(uint256 value,Node[] children)"
         );
     }
 
     #[test]
-    fn mutually_recursive_structs_are_rejected() {
-        // Same as self-recursion: a cycle (A -> B -> A) has no finite hash.
+    fn mutually_recursive_structs_are_supported() {
+        // A cycle (A -> B -> A) is valid under EIP-712. Each type's canonical
+        // form lists the other as its sole dependency head.
         let collection = collect_one(
             "struct A { B b; }
              struct B { A a; }",
         );
-        assert!(matches!(
-            collection.get("A"),
-            Err(Eip712CollectionLookupError::Rejected { .. })
-        ));
-        assert!(matches!(
-            collection.get("B"),
-            Err(Eip712CollectionLookupError::Rejected { .. })
-        ));
+        assert_eq!(get_canonical_type(&collection, "A"), "A(B b)B(A a)");
+        assert_eq!(get_canonical_type(&collection, "B"), "B(A a)A(B b)");
     }
 
     #[test]
@@ -817,7 +812,7 @@ mod tests {
         );
         assert!(matches!(
             collection.get("Inner"),
-            Err(Eip712CollectionLookupError::Rejected { .. })
+            Err(Eip712CollectionLookupError::Rejected( Eip712TypeRejected { reason: RejectReason::NonEncodableMembers { members } ,.. })) if members.iter().any(|member| member.contains("m"))
         ));
         let outer = collection.get("Outer").unwrap_err();
         assert!(
@@ -894,9 +889,11 @@ mod tests {
              contract C { struct S { uint256 b; } }
              struct Uses { S s; }",
         );
+        // `Uses` is well-formed in isolation; it is rejected because its member
+        // references the unusable `S`, which surfaces as a non-encodable member.
         let uses = collection.get("Uses").unwrap_err();
         assert!(
-            matches!(&uses, Eip712CollectionLookupError::Rejected(Eip712TypeRejected { reason: RejectReason::Duplicate { name, .. }, .. }) if name == "S"),
+            matches!(&uses, Eip712CollectionLookupError::Rejected(Eip712TypeRejected { reason: RejectReason::NonEncodableMembers { members }, .. }) if members.iter().any(|member| member == "S")),
             "unexpected: {uses}"
         );
     }
@@ -936,16 +933,7 @@ mod tests {
         #[test]
         fn exact_supported_version() {
             assert_eq!(
-                to_language_version(&Version::new(0, 8, 24)).unwrap(),
-                LanguageVersion::V0_8_24
-            );
-        }
-
-        #[test]
-        fn strips_build_and_prerelease_metadata() {
-            let version = Version::parse("0.8.24+commit.abcdef").unwrap();
-            assert_eq!(
-                to_language_version(&version).unwrap(),
+                to_language_version(Version::new(0, 8, 24)).unwrap(),
                 LanguageVersion::V0_8_24
             );
         }
@@ -953,7 +941,7 @@ mod tests {
         #[test]
         fn clamps_newer_versions_to_latest() {
             assert_eq!(
-                to_language_version(&Version::new(0, 9, 0)).unwrap(),
+                to_language_version(Version::new(0, 9, 0)).unwrap(),
                 LanguageVersion::LATEST
             );
         }
@@ -961,8 +949,17 @@ mod tests {
         #[test]
         fn rejects_versions_older_than_0_8_0() {
             assert!(matches!(
-                to_language_version(&Version::new(0, 7, 6)),
+                to_language_version(Version::new(0, 7, 6)),
                 Err(FromSemverError::UnsupportedVersion)
+            ));
+        }
+
+        #[test]
+        fn rejects_versions_with_build_and_prerelease_metadata() {
+            let version = Version::parse("0.8.24+commit.abcdef").unwrap();
+            assert!(matches!(
+                to_language_version(version),
+                Err(FromSemverError::UnexpectedMetadata)
             ));
         }
     }

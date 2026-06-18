@@ -91,7 +91,7 @@ impl CachedEip712Provider {
                      path,
                      version,
                  }| {
-                    collect_eip712_types_for_file(path, version, import_resolver)
+                    collect_eip712_types_for_file(path, version.clone(), import_resolver)
                         .map(|collection| (source.clone(), collection))
                 },
             )
