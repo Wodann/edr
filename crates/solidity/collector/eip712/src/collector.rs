@@ -36,7 +36,7 @@ pub struct MissingStructDependency {
 impl Eip712Type {
     /// Canonicalizes the provided encodable struct and its transitive
     /// dependencies.
-    pub fn canonicalize(
+    fn canonicalize(
         root: &EncodableStruct,
         encodables: &HashMap<String, EncodableStruct>,
     ) -> Result<Eip712Type, MissingStructDependency> {
@@ -58,13 +58,13 @@ impl Eip712Type {
                 })?;
 
                 stack.extend(dependency.direct_struct_deps.clone());
-                visited.insert(next.to_owned());
+                visited.insert(next.clone());
             }
 
             Ok(visited.into_iter().collect())
         }
 
-        let mut dependency_heads = transitive_struct_deps(&root, encodables)?;
+        let mut dependency_heads = transitive_struct_deps(root, encodables)?;
         dependency_heads.sort();
 
         let name = root.name.clone();
@@ -130,16 +130,6 @@ impl Eip712TypeCollection {
             })
         }
     }
-
-    /// Number of usable (encodable) type definitions.
-    pub fn len(&self) -> usize {
-        self.types.len()
-    }
-
-    /// Whether there are no usable type definitions.
-    pub fn is_empty(&self) -> bool {
-        self.types.is_empty()
-    }
 }
 
 /// Errors that prevent collection from running at all (as opposed to per-type
@@ -158,6 +148,25 @@ pub enum CollectError {
         /// Why it could not be read.
         reason: String,
     },
+}
+
+// TODO: `derive(Clone)` on CollectError once `FromSemverError` implements
+// `Clone`.
+impl Clone for CollectError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::InvalidSolcVersion(FromSemverError::UnexpectedMetadata) => {
+                Self::InvalidSolcVersion(FromSemverError::UnexpectedMetadata)
+            }
+            Self::InvalidSolcVersion(FromSemverError::UnsupportedVersion) => {
+                Self::InvalidSolcVersion(FromSemverError::UnsupportedVersion)
+            }
+            Self::RootFileNotFound { path, reason } => Self::RootFileNotFound {
+                path: path.clone(),
+                reason: reason.clone(),
+            },
+        }
+    }
 }
 
 /// Collects EIP-712 canonical types reachable from `root_source`.
@@ -204,10 +213,7 @@ pub fn collect_eip712_types_from_compilation_unit(unit: &CompilationUnit) -> Eip
         non_encodables,
     } = reject_non_encodable(unique);
 
-    let rejected = duplicates
-        .into_iter()
-        .chain(non_encodables.into_iter())
-        .collect();
+    let rejected = duplicates.into_iter().chain(non_encodables).collect();
 
     let types = encodables
         .iter()
@@ -253,18 +259,18 @@ struct CollectedStruct {
     members: Vec<CollectedMember>,
 }
 
-pub(super) struct EncodableStruct {
-    pub(super) name: String,
-    pub(super) members: Vec<EncodableMember>,
+struct EncodableStruct {
+    pub name: String,
+    pub members: Vec<EncodableMember>,
     /// The names of structs directly referenced by a struct's members (array
     /// suffixes stripped, self-references excluded).
-    pub(super) direct_struct_deps: Vec<String>,
+    pub direct_struct_deps: Vec<String>,
 }
 
 impl EncodableStruct {
     /// Constructs a new instance from a [`CollectedStruct`], rejecting it if
     /// any member is not encodable.
-    pub fn new(
+    fn new(
         struct_def: CollectedStruct,
         is_struct_fn: impl Fn(&str) -> bool,
     ) -> Result<Self, RejectReason> {
@@ -395,7 +401,7 @@ pub enum RejectReason {
     NonEncodableMembers { members: Vec<String> },
 }
 
-pub struct DedupedCollection {
+struct DedupedCollection {
     pub unique: HashMap<String, CollectedStruct>,
     pub duplicates: HashMap<String, RejectReason>,
 }
@@ -403,11 +409,6 @@ pub struct DedupedCollection {
 /// Deduplicates structs with the same name but different definitions; rejects
 /// all of them as unusable.
 fn dedup_by_name(collected: Vec<CollectedStruct>) -> DedupedCollection {
-    struct FileIdAndFingerprint {
-        pub file_id: String,
-        pub fingerprint: String,
-    }
-
     let mut by_name: HashMap<String, Vec<CollectedStruct>> = HashMap::new();
     for struct_def in collected {
         by_name
@@ -425,11 +426,11 @@ fn dedup_by_name(collected: Vec<CollectedStruct>) -> DedupedCollection {
             .next()
             .expect("at least one struct definition must exist for this name");
         let first_struct_def = next.clone();
-        let fingerprint = make_fingerprint(&next);
+        let fingerprint = make_fingerprint(next);
 
         // If fingerprints match, keep one definition and ignore the rest; otherwise,
         // reject all definitions for this name as unusable.
-        if iter.all(|def| make_fingerprint(&def) == fingerprint) {
+        if iter.all(|def| make_fingerprint(def) == fingerprint) {
             unique.insert(struct_name, first_struct_def);
         } else {
             let file_ids = struct_defs.into_iter().map(|def| def.file_id).collect();
@@ -467,7 +468,7 @@ fn make_fingerprint(struct_def: &CollectedStruct) -> String {
 
 /// A set of encodable structs, keyed by name, along with the names of rejected
 /// structs and why they were rejected.
-pub struct EncodableCollection {
+struct EncodableCollection {
     pub encodables: HashMap<String, EncodableStruct>,
     pub non_encodables: HashMap<String, RejectReason>,
 }

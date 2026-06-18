@@ -12,15 +12,22 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{mpsc, Arc,},
-    thread,
+    sync::Arc,
 };
 
+use crossbeam_channel::select_biased;
+use derive_where::derive_where;
+use edr_utils_sync::CancellableThread;
 use rayon::prelude::*;
 use semver::Version;
 
 use crate::{
-    CollectError, Eip712Type, collector::{Eip712CollectionLookupError, Eip712TypeCollection, Eip712TypeRejected, collect_eip712_types_for_file}, resolver::ImportResolver 
+    collector::{
+        collect_eip712_types_for_file, Eip712CollectionLookupError, Eip712TypeCollection,
+        Eip712TypeRejected,
+    },
+    resolver::ImportResolver,
+    CollectError, Eip712Type,
 };
 
 /// A Solidity source file to collect EIP-712 canonical types from.
@@ -130,60 +137,30 @@ pub enum AsyncEip712Error {
     LookupFailed(#[from] Eip712LookupError),
 }
 
-pub struct Eip712TypeRequest {
+pub struct Eip712TypeRequest<ErrorT> {
     source: PathBuf,
     type_name: String,
-    response_sender: crossbeam_channel::Sender<Result<Eip712Type, AsyncEip712Error>>,
+    response_sender: crossbeam_channel::Sender<Result<Eip712Type, ErrorT>>,
 }
 
 /// A cloneable, `Send + Sync` handle that collects EIP-712 types in the
 /// background, parallelizing the per-root parses (via [`rayon`]). Queries block
 /// until collection has finished.
-#[derive(Clone, Debug)]
-pub struct SharedEip712Provider {
-    request_sender: mpsc::Sender<Eip712TypeRequest>,
-    backend: Arc<AsyncEip712ProviderBackend>,
+#[derive(Debug)]
+#[derive_where(Clone;)]
+pub struct SharedEip712Provider<ErrorT> {
+    request_sender: crossbeam_channel::Sender<Eip712TypeRequest<ErrorT>>,
+    // Dropping this disconnects the cancellation channel and joins the
+    // dedicated thread, so no explicit shutdown is needed.
+    _thread: Arc<CancellableThread>,
 }
 
-impl SharedEip712Provider {
-    const THREAD_NAME_PREFIX: &'static str = "async-eip712-provider";
-
-    pub fn collect(roots: Vec<Eip712Root>, import_resolver: ImportResolver) -> Result<Self, CollectError> {
-        let provider = CachedEip712Provider::collect(&roots, &import_resolver)?;
-    }
-
-    /// Spawns a background thread that collects every root in parallel and then
-    /// makes the resulting [`Eip712Provider`] available to queries.
-    pub fn collect_in_background(roots: Vec<Eip712Root>, import_resolver: ImportResolver) -> Self {
-        thread::Builder::new()
-            .name("async-eip712-provider".to_owned())
-            .spawn(move || {
-                let provider = 
-
-                let by_source = roots
-                    .par_iter()
-                    .map(|root| (root.source.clone(), collect_root(root, &import_resolver)))
-                    .collect();
-                let provider = CachedEip712Provider { by_source };
-
-                *background
-                    .provider
-                    .lock()
-                    .expect("EIP-712 collection mutex poisoned") = Some(provider);
-                background.ready.notify_all();
-            })
-            .expect("EIP-712 collector thread should spawn");
-
-        Self { collection }
-    }
+impl<ErrorT> SharedEip712Provider<ErrorT> {
+    const THREAD_NAME: &'static str = "async-eip712-provider";
 
     /// Looks up a canonical type by name within the scope of `source`, blocking
     /// until background collection has finished.
-    pub fn get_eip712_type(
-        &self,
-        source: &Path,
-        type_name: &str,
-    ) -> Result<Eip712Type, AsyncEip712Error> {
+    pub fn get_eip712_type(&self, source: &Path, type_name: &str) -> Result<Eip712Type, ErrorT> {
         let (sender, receiver) = crossbeam_channel::bounded(1);
         let request = Eip712TypeRequest {
             source: source.to_path_buf(),
@@ -201,27 +178,90 @@ impl SharedEip712Provider {
     }
 }
 
-/// A wrapper type to hold the `JoinHandle` of the `AsyncEip712Provider`'s
-/// background thread and ensure it is joined on drop.
-#[derive(Debug)]
-pub struct AsyncEip712ProviderBackend {
-    background_thread: Option<thread::JoinHandle<()>>,
-}
+impl SharedEip712Provider<AsyncEip712Error> {
+    /// Spawns a background thread that collects every root in parallel and then
+    /// makes the resulting [`Eip712Provider`] available to queries.
+    pub fn collect_in_background(roots: Vec<Eip712Root>, import_resolver: ImportResolver) -> Self {
+        let (request_sender, request_receiver) = crossbeam_channel::unbounded();
+        let thread = CancellableThread::spawn(Self::THREAD_NAME.to_owned(), move |cancellation_receiver| {
+                match CachedEip712Provider::collect(&roots, &import_resolver) {
+                    Ok(provider) => loop {
+                        // `select_biased!` picks the first listed branch when multiple
+                        // arms are ready, so cancellation always wins over pending work.
+                        select_biased! {
+                            // Cancellation channel was disconnected by dropping the CancellableThread.
+                            recv(cancellation_receiver) -> _ => break,
+                            recv(request_receiver) -> msg => match msg {
+                                Ok(request) => {
+                                    let Eip712TypeRequest { source, type_name, response_sender } = request;
+                                    let response = provider.get_eip712_type(&source, &type_name).map_err(AsyncEip712Error::LookupFailed);
+                                    response_sender.send(response).expect("EIP-712 provider response channel should be open");
+                                },
+                                Err(_) => break,
+                            },
+                        }
+                    },
+                    Err(error) => loop {
+                        // `select_biased!` picks the first listed branch when multiple
+                        // arms are ready, so cancellation always wins over pending work.
+                        select_biased! {
+                            // Cancellation channel was disconnected by dropping the CancellableThread.
+                            recv(cancellation_receiver) -> _ => break,
+                            recv(request_receiver) -> msg => match msg {
+                                Ok(request) => {
+                                    let Eip712TypeRequest { response_sender, .. } = request;
+                                    response_sender.send(Err(AsyncEip712Error::from(error.clone()))).expect("EIP-712 provider response channel should be open");
+                                },
+                                Err(_) => break,
+                            },
+                        }
+                    }
+                }
+            })
+            .expect("EIP-712 provider thread should spawn");
 
-impl Drop for AsyncEip712ProviderBackend {
-    fn drop(&mut self) {
-        // The background thread should have finished by the time the backend is
-        // dropped, but we join it here to be sure and to avoid a potential
-        // panic if it tries to access the collection after it's been dropped.
-        if let Some(background_thread) = self.background_thread.take() {
-            background_thread
-                .join()
-                .expect("EIP-712 collector thread should join cleanly");
+        Self {
+            request_sender,
+            _thread: Arc::new(thread),
         }
     }
 }
 
-impl 
+impl SharedEip712Provider<Eip712LookupError> {
+    /// Collects EIP-712 types for every root in parallel and then spawns a
+    /// background thread to serve queries.
+    pub fn collect(
+        roots: Vec<Eip712Root>,
+        import_resolver: ImportResolver,
+    ) -> Result<Self, CollectError> {
+        let provider = CachedEip712Provider::collect(&roots, &import_resolver)?;
+
+        let (request_sender, request_receiver) = crossbeam_channel::unbounded();
+        let thread = CancellableThread::spawn(Self::THREAD_NAME.to_owned(), move |cancellation_receiver| {
+                loop {
+                    // `select_biased!` picks the first listed branch when multiple
+                    // arms are ready, so cancellation always wins over pending work.
+                    select_biased! {
+                        // Cancellation channel was disconnected by dropping the CancellableThread.
+                        recv(cancellation_receiver) -> _ => break,
+                        recv(request_receiver) -> msg => match msg {
+                            Ok(value) => {
+                                let Eip712TypeRequest { source, type_name, response_sender } = value;
+                                let response = provider.get_eip712_type(&source, &type_name);
+                                response_sender.send(response).expect("EIP-712 provider response channel should be open");
+                            },
+                            Err(_) => break,
+                        },
+                    }
+                }
+        }).expect("EIP-712 provider thread should spawn");
+
+        Ok(Self {
+            request_sender,
+            _thread: Arc::new(thread),
+        })
+    }
+}
 
 // NOTE (Default): `AsyncEip712Provider` intentionally has no `Default` impl —
 // an EIP-712 provider is meaningless without the roots it covers.
@@ -233,7 +273,7 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::thread;
 
     use super::*;
 
@@ -258,21 +298,22 @@ mod tests {
     #[test]
     fn sync_provider_collects_and_queries_by_scope() {
         let provider =
-            CachedEip712Provider::collect(&[root("relative/Root.sol")], &ImportResolver::default());
+            CachedEip712Provider::collect(&[root("relative/Root.sol")], &ImportResolver::default())
+                .expect("should collect EIP-712 types");
 
         assert_eq!(
             provider
-                .get(Path::new("relative/Root.sol"), "Mail")
+                .get_eip712_type(Path::new("relative/Root.sol"), "Mail")
                 .unwrap()
                 .canonical_definition(),
             mail_canonical()
         );
         assert!(provider
-            .get(Path::new("relative/Root.sol"), "DoesNotExist")
+            .get_eip712_type(Path::new("relative/Root.sol"), "DoesNotExist")
             .is_err());
         // A scope that was never collected reports as much.
         assert!(provider
-            .get(Path::new("never/collected.sol"), "Mail")
+            .get_eip712_type(Path::new("never/collected.sol"), "Mail")
             .is_err());
     }
 
@@ -286,11 +327,12 @@ mod tests {
         let provider = CachedEip712Provider::collect(
             &[root("mapped/Root.sol")],
             &ImportResolver::new(import_map),
-        );
+        )
+        .expect("should collect EIP-712 types");
 
         assert_eq!(
             provider
-                .get(Path::new("mapped/Root.sol"), "Payment")
+                .get_eip712_type(Path::new("mapped/Root.sol"), "Payment")
                 .unwrap()
                 .canonical_definition(),
             "Payment(Token token,uint256 amount)Token(address addr,uint8 decimals)"
@@ -299,21 +341,21 @@ mod tests {
 
     #[test]
     fn async_provider_collects_all_roots_then_serves() {
-        let provider = SharedEip712Provider::new(
+        let provider = SharedEip712Provider::collect_in_background(
             vec![root("relative/Root.sol"), root("relative/Dep.sol")],
             ImportResolver::default(),
         );
 
         assert_eq!(
             provider
-                .get(Path::new("relative/Root.sol"), "Mail")
+                .get_eip712_type(Path::new("relative/Root.sol"), "Mail")
                 .unwrap()
                 .canonical_definition(),
             mail_canonical()
         );
         assert_eq!(
             provider
-                .get(Path::new("relative/Dep.sol"), "Person")
+                .get_eip712_type(Path::new("relative/Dep.sol"), "Person")
                 .unwrap()
                 .canonical_definition(),
             "Person(address wallet,string name)"
@@ -322,17 +364,17 @@ mod tests {
 
     #[test]
     fn async_provider_blocks_concurrent_queries_until_ready() {
-        let provider = Arc::new(SharedEip712Provider::new(
+        let provider = SharedEip712Provider::collect_in_background(
             vec![root("relative/Root.sol")],
             ImportResolver::default(),
-        ));
+        );
 
         let handles: Vec<_> = (0..8)
             .map(|_| {
-                let provider = Arc::clone(&provider);
+                let provider = provider.clone();
                 thread::spawn(move || {
                     provider
-                        .get(Path::new("relative/Root.sol"), "Person")
+                        .get_eip712_type(Path::new("relative/Root.sol"), "Person")
                         .unwrap()
                         .canonical_definition()
                         .to_string()

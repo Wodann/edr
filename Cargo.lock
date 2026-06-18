@@ -3622,7 +3622,9 @@ version = "0.3.8"
 dependencies = [
  "alloy-dyn-abi",
  "crossbeam-channel",
+ "derive-where",
  "edr_common",
+ "edr_utils_sync",
  "rayon",
  "semver 1.0.28",
  "slang_solidity_v2",

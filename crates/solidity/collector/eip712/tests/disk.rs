@@ -4,9 +4,7 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use edr_solidity_collector_eip712::{
-    collect_eip712_types_for_file, CollectError, CollectionLookupError, ImportResolver,
-};
+use edr_solidity_collector_eip712::{CollectError, ImportResolver};
 use semver::Version;
 
 fn fixture(relative: &str) -> PathBuf {
