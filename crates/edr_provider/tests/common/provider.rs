@@ -55,5 +55,5 @@ pub fn send_transaction(
         MethodInvocation::SendTransaction(request),
     ))?;
 
-    Ok(serde_json::from_value(response.result)?)
+    Ok(response.deserialize_result()?)
 }

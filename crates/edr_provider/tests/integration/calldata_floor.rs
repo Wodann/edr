@@ -31,7 +31,9 @@ fn estimate_gas(provider: &Provider<L1ChainSpec>, request: L1CallRequest) -> u64
         )))
         .expect("eth_estimateGas should succeed");
 
-    let gas: U64 = serde_json::from_value(response.result).expect("response should be U64");
+    let gas: U64 = response
+        .deserialize_result()
+        .expect("response should be U64");
 
     gas.into_limbs()[0]
 }
@@ -44,8 +46,9 @@ fn gas_used(provider: &Provider<L1ChainSpec>, transaction_hash: B256) -> u64 {
         ))
         .expect("eth_getTransactionReceipt should succeed");
 
-    let receipt: Option<L1RpcTransactionReceipt> =
-        serde_json::from_value(response.result).expect("response should be Receipt");
+    let receipt: Option<L1RpcTransactionReceipt> = response
+        .deserialize_result()
+        .expect("response should be Receipt");
 
     let receipt = receipt.expect("receipt should exist");
 

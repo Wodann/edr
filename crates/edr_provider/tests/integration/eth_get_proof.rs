@@ -52,9 +52,9 @@ fn verify_account_proof<'proof>(
         )))
         .unwrap();
 
-    let account_proof_response: EIP1186AccountProofResponse =
-        serde_json::from_value(proof_response.result)
-            .expect("Failed to deserialize account proof response");
+    let account_proof_response: EIP1186AccountProofResponse = proof_response
+        .deserialize_result()
+        .expect("Failed to deserialize account proof response");
 
     assert_eq!(account_proof_response.account_proof, expected_proof);
 }
@@ -78,9 +78,9 @@ fn verify_storage_proof<'proof>(
         )))
         .unwrap();
 
-    let account_proof_response: EIP1186AccountProofResponse =
-        serde_json::from_value(proof_response.result)
-            .expect("Failed to deserialize account proof response");
+    let account_proof_response: EIP1186AccountProofResponse = proof_response
+        .deserialize_result()
+        .expect("Failed to deserialize account proof response");
 
     assert_eq!(
         account_proof_response
